@@ -3,13 +3,14 @@ import Testing
 
 struct DashboardPresentationTests {
     private func pr(review: GitHubReviewStatus? = .unknown, draft: Bool = false, url: URL? = nil,
-                    repository: String = "sample-team/project") -> GitHubPullRequest {
+                    repository: String = "sample-team/project",
+                    latestReviews: GitHubLatestReviews = .init(reviews: [], limitations: [])) -> GitHubPullRequest {
         GitHubPullRequest(id: "PR_fixture", number: 12345, title: "Improve native dashboard metadata",
             url: url ?? URL(string: "https://github.com/sample-team/project/pull/12345")!,
             repository: .init(id: "repo", nameWithOwner: repository, url: URL(string: "https://github.com/sample-team/project")!),
             authorLogin: "contributor", isDraft: draft, createdAt: .distantPast,
             updatedAt: Date(timeIntervalSince1970: 1000), reviewStatus: review,
-            latestReviews: .init(reviews: [], limitations: []), reviewRequests: nil,
+            latestReviews: latestReviews, reviewRequests: nil,
             headRefOid: "head", diffStatistics: GitHubDiffStatistics(changedFiles: 3, additions: 142, deletions: 28))
     }
 
@@ -68,6 +69,48 @@ struct DashboardPresentationTests {
         #expect(display.diff?.filesLabel == "1 file" && display.diff?.additionsLabel == "+1.5M")
         #expect(display.accessibilityLabel.contains("Draft pull request"))
         #expect(display.accessibilityLabel.contains("1500000 additions, 28000 deletions"))
+    }
+
+    @Test func draftsDoNotPromptForReviewOrLoseGitHubEvidence() {
+        let value = pr(review: .reviewRequired, draft: true)
+        let display = PullRequestRowPresentation(pr: value, inbox: .drafts)
+        #expect(display.review == nil && display.authorLabel == nil)
+        #expect(display.accessibilityLabel.contains("Draft pull request"))
+        #expect(display.help.contains("not yet ready for normal review"))
+        #expect(display.help.contains("GitHub review metadata: Review required"))
+        #expect(display.accessibilityLabel.contains("142 additions, 28 deletions"))
+        #expect(display.diff == value.diffStatistics && display.browserURL == value.browserURL)
+        #expect(value.reviewStatus == .reviewRequired && value.latestReviews?.reviews.isEmpty == true)
+        #expect(PullRequestRowPresentation(pr: pr(review: .reviewRequired), inbox: .authored).review?.label == "Review required")
+    }
+
+    @Test(arguments: [GitHubPullRequestReview.State.approved, .changesRequested, .commented])
+    func draftsRetainSubmittedReviewsWhenOverallDecisionRequiresReview(submitted: GitHubPullRequestReview.State) {
+        let reviews = GitHubLatestReviews(reviews: [.init(id: "review", authorLogin: "reviewer", state: submitted)], limitations: [])
+        let value = pr(review: .reviewRequired, draft: true, latestReviews: reviews)
+        let display = PullRequestRowPresentation(pr: value, inbox: .drafts)
+        #expect(display.review == PullRequestReviewPresentation(status: nil, reviews: reviews))
+        #expect(display.review?.label != "Review required")
+        #expect(display.help.contains("Latest reviews:"))
+        #expect(value.latestReviews == reviews && value.reviewStatus == .reviewRequired)
+    }
+
+    @Test(arguments: [GitHubReviewStatus.approved, .changesRequested, .unknown])
+    func otherDraftReviewDecisionsRemainAccurate(status: GitHubReviewStatus) {
+        let value = pr(review: status, draft: true)
+        #expect(PullRequestRowPresentation(pr: value, inbox: .drafts).review == value.reviewPresentation)
+    }
+
+    @Test func tabBadgesAndAccessibilityShareExactCounts() {
+        let result = GitHubPullRequestDiscoveryResult(pullRequests: [pr(), pr(draft: true)], truncationReasons: [], coverageLimitations: [])
+        let loaded = PullRequestSectionState(phase: .loaded, result: result)
+        let empty = PullRequestSectionState(phase: .loaded, result: .init(pullRequests: [], truncationReasons: [], coverageLimitations: []))
+        for inbox in PullRequestInbox.allCases {
+            #expect(inbox.countText(in: .init()) == "—")
+            #expect(inbox.countText(in: empty) == "0")
+            #expect(inbox.countText(in: loaded) == (inbox == .review ? "2" : "1"))
+            #expect(inbox.label(in: loaded) == "\(inbox.shortTitle) \(inbox.countText(in: loaded))")
+        }
     }
 
     @Test(arguments: PullRequestInbox.allCases)
