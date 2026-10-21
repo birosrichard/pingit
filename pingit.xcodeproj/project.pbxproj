@@ -38,6 +38,8 @@
         AB1000000000000000000002 /* PullRequestPresentation.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB2000000000000000000001; };
         AB1000000000000000000003 /* PullRequestRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB2000000000000000000002; };
         AB1000000000000000000004 /* DashboardPresentationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB2000000000000000000003; };
+        AC1000000000000000000001 /* BackgroundSync.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC2000000000000000000001; };
+        AC1000000000000000000002 /* BackgroundSync.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC2000000000000000000001; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -69,6 +71,7 @@
         AB2000000000000000000001 /* PullRequestPresentation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PullRequestPresentation.swift; sourceTree = "<group>"; };
         AB2000000000000000000002 /* PullRequestRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PullRequestRow.swift; sourceTree = "<group>"; };
         AB2000000000000000000003 /* DashboardPresentationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DashboardPresentationTests.swift; sourceTree = "<group>"; };
+        AC2000000000000000000001 /* BackgroundSync.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GitHub/BackgroundSync.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -175,7 +178,7 @@
 		};
 		B40000000000000000000001 /* Core */ = {
 			isa = PBXGroup;
-			children = (F20000000000000000000001, E20000000000000000000002, E20000000000000000000001, D20000000000000000000001,
+			children = (AC2000000000000000000001, F20000000000000000000001, E20000000000000000000002, E20000000000000000000001, D20000000000000000000001,
 				B40000000000000000000002 /* Authentication */,
 			);
 			path = Core;
@@ -296,7 +299,7 @@
 		A70000000000000000000001 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
-			files = (F10000000000000000000011, E10000000000000000000004, E10000000000000000000002, D10000000000000000000001,
+			files = (AC1000000000000000000001, F10000000000000000000011, E10000000000000000000004, E10000000000000000000002, D10000000000000000000001,
 				B10000000000000000000004 /* GitHubAccountView.swift in Sources */,
 				B10000000000000000000003 /* GitHubConnection.swift in Sources */,
 				B10000000000000000000002 /* GitHubClient.swift in Sources */,
@@ -312,7 +315,7 @@
 		C70000000000000000000001 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
-			files = (F10000000000000000000022, F10000000000000000000012, E10000000000000000000007, E10000000000000000000005, E10000000000000000000003, D10000000000000000000004, D10000000000000000000003, D10000000000000000000002,
+			files = (AC1000000000000000000002, F10000000000000000000022, F10000000000000000000012, E10000000000000000000007, E10000000000000000000005, E10000000000000000000003, D10000000000000000000004, D10000000000000000000003, D10000000000000000000002,
 				C10000000000000000000001 /* AuthenticationTestSupport.swift in Sources */,
                 AB1000000000000000000002 /* PullRequestPresentation.swift in Sources */,
                 AB1000000000000000000004 /* DashboardPresentationTests.swift in Sources */,
