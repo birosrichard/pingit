@@ -278,6 +278,10 @@ enum PullRequestInbox: String, CaseIterable, Identifiable {
         case .authored: "My PRs"
         case .drafts: "Drafts"
         }
-        return "\(name) \(state.result == nil ? "—" : String(pullRequests(in: state).count))"
+        return "\(name) \(countText(in: state))"
+    }
+
+    func countText(in state: PullRequestSectionState) -> String {
+        state.result == nil ? "—" : String(pullRequests(in: state).count)
     }
 }

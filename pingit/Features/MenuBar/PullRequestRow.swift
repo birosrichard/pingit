@@ -45,19 +45,7 @@ struct PullRequestRow: View {
                     .font(.callout).foregroundStyle(.secondary)
                     .lineLimit(1).truncationMode(.middle)
                     .help(presentation.repositoryLabel)
-                ViewThatFits(in: .horizontal) {
-                    HStack(spacing: 8) {
-                        contextMetadata
-                        Text("·").foregroundStyle(.tertiary).accessibilityHidden(true)
-                        diffMetadata
-                    }
-                    .fixedSize(horizontal: true, vertical: false)
-                    VStack(alignment: .leading, spacing: 4) {
-                        contextMetadata
-                        diffMetadata
-                    }
-                }
-                .font(.callout)
+                metadata.font(.callout)
                 if presentation.browserURL == nil {
                     Label("GitHub link unavailable", systemImage: "link")
                         .font(.caption).foregroundStyle(.secondary)
@@ -65,13 +53,32 @@ struct PullRequestRow: View {
             }
         }
         .padding(DashboardLayout.rowInset)
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(maxWidth: .infinity, minHeight: 64, alignment: .leading)
         .contentShape(RoundedRectangle(cornerRadius: 8))
         .background(isHovered && presentation.browserURL != nil ? Color.primary.opacity(0.045) : .clear,
                     in: RoundedRectangle(cornerRadius: 8))
         .overlay {
             RoundedRectangle(cornerRadius: 8)
                 .strokeBorder(isFocused ? Color.accentColor : .clear, lineWidth: 2)
+        }
+    }
+
+    @ViewBuilder private var metadata: some View {
+        if presentation.authorLabel != nil || presentation.review != nil {
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 8) {
+                    contextMetadata
+                    Text("·").foregroundStyle(.tertiary).accessibilityHidden(true)
+                    diffMetadata
+                }
+                .fixedSize(horizontal: true, vertical: false)
+                VStack(alignment: .leading, spacing: 4) {
+                    contextMetadata
+                    diffMetadata
+                }
+            }
+        } else {
+            diffMetadata
         }
     }
 

@@ -180,10 +180,13 @@ struct MenuBarView: View {
                     HStack(spacing: 6) {
                         Text(tab.shortTitle)
                             .font(.body.weight(isSelected ? .semibold : .medium))
-                        Text(tabState.result == nil ? "—" : String(tab.pullRequests(in: tabState).count))
-                            .font(.caption.weight(.medium))
+                        Text(tab.countText(in: tabState))
+                            .font(.caption.weight(.semibold))
                             .monospacedDigit()
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(isSelected ? Color.primary : .secondary)
+                            .padding(.horizontal, 5)
+                            .padding(.vertical, 1)
+                            .background(Color.primary.opacity(isSelected ? 0.10 : 0.06), in: Capsule())
                     }
                     .frame(maxWidth: .infinity, minHeight: 30)
                     .contentShape(RoundedRectangle(cornerRadius: 8))

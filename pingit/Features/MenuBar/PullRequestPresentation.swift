@@ -20,11 +20,26 @@ struct PullRequestRowPresentation: Equatable {
         updatedAt = pr.updatedAt
         avatarOwner = pr.repository.ownerLogin
         authorLabel = inbox == .review ? pr.authorLogin.map { "@\($0)" } ?? "Author unavailable" : nil
-        review = inbox == .review ? nil : pr.reviewPresentation
+        if inbox == .review {
+            review = nil
+        } else if inbox == .drafts && pr.isDraft && pr.reviewStatus == .reviewRequired {
+            // A draft is not a request for review; retain any submitted reviewer activity.
+            review = pr.latestReviews?.reviews.isEmpty == false
+                ? PullRequestReviewPresentation(status: nil, reviews: pr.latestReviews) : nil
+        } else {
+            review = pr.reviewPresentation
+        }
         diff = pr.diffStatistics
         browserURL = pr.browserURL
         let context = authorLabel ?? review?.label ?? ""
-        let detail = review?.detail ?? "Pull request author: \(pr.authorLogin ?? "unavailable")."
+        let detail: String
+        if inbox == .review {
+            detail = "Pull request author: \(pr.authorLogin ?? "unavailable")."
+        } else if inbox == .drafts && pr.isDraft {
+            detail = "Draft; not yet ready for normal review. GitHub review metadata: \(pr.reviewPresentation.label). \(pr.reviewPresentation.detail)"
+        } else {
+            detail = pr.reviewPresentation.detail
+        }
         let diffDescription = diff?.accessibilityLabel ?? "Diff statistics unavailable"
         accessibilityLabel = "\(pr.isDraft ? "Draft pull request" : "Pull request") \(pr.number). \(title). \(repositoryLabel). \(context). \(detail) \(diffDescription)."
         help = "\(title)\n\(repositoryLabel)\n\(detail)\n\(diffDescription)\n\(browserURL == nil ? "GitHub link unavailable" : "Open on GitHub")"
