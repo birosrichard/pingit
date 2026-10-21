@@ -1,3 +1,10 @@
+> Current Phase 4B: a single native row component combines review/author context
+> and diff totals, with clearer typography, owner identity and measured list sizing.
+> Default rows and their tooltips/VoiceOver hide all CI states. CI unavailability
+> alone is not a discovery warning; real errors/partial results remain visible.
+> See [current design decisions, renders and validation](phase-4b.md). Earlier
+> implementation/validation records below are historical.
+
 > Phase 4A adds independent current-head CI and PR diff totals to the existing
 > discovery/refresh lifecycle. See [CI semantics and token limitations](checks.md)
 > and [Phase 4A validation](phase-4a.md). Historical validation below remains unchanged.

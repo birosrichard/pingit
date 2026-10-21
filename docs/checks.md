@@ -1,3 +1,11 @@
+> Phase 4B product decision: default PR rows no longer show any CI state, including
+> success/failure/pending, skipped/neutral, unavailable and no checks. CI is also
+> absent from row help and accessibility. Unavailable CI alone no longer raises a
+> dashboard warning. The data/query/normalization/merge implementation and tests
+> described below are retained for a future separately scoped authentication
+> strategy. Diff totals, review semantics and real discovery errors remain visible.
+> See [Phase 4B design and validation](phase-4b.md).
+
 # CI and pull request diff metadata — Phase 4A
 
 ## Independent meanings

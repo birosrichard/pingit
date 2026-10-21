@@ -1,3 +1,7 @@
+> Historical Phase 4A record. Phase 4B retains this CI implementation and its tests,
+> but hides CI from default dashboard rows/help/accessibility and suppresses warnings
+> caused solely by unavailable CI. See [the current UI policy](phase-4b.md).
+
 # Phase 4A — CI checks and PR diff statistics
 
 Implemented and validated on 2026-10-21 (Europe/Prague). Further background refresh

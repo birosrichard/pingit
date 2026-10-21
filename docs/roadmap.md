@@ -1,6 +1,6 @@
 # Development roadmap
 
-Phases 1–3F and Phase 4A (CI checks and diff statistics) are implemented.
+Phases 1–3F, 4A (CI/diff metadata) and 4B (native dashboard refinement) are implemented.
 Further activity, background updates and distribution work remain separately scoped.
 Keep each phase independently buildable and validate before moving on.
 
@@ -91,6 +91,19 @@ Keep each phase independently buildable and validate before moving on.
 - See [semantics and permissions](checks.md) and [validation](phase-4a.md).
 - Next: signed-app personal/Apify token acceptance and VoiceOver/keyboard checks;
   scope any authentication change separately if PAT Checks access remains unavailable.
+
+## 4B. Native dashboard UX refinement — implemented
+
+- One consistent row for all inboxes: two-line titles, owner identity, aligned time,
+  review/author context and accessible compact diff totals.
+- Native grouped list, refined segmented navigation, contextual headings and bounded
+  content-sized scrolling; header/navigation/footer remain fixed.
+- All default CI row/help/accessibility output is hidden; underlying CI stays intact.
+  Unavailable CI alone no longer warns, while genuine discovery issues remain visible.
+- 192 tests and signed arm64 Debug validation pass. Full native fixture renders were
+  inspected and refined; live popover capture timed out. See [Phase 4B evidence](phase-4b.md).
+- Next: signed-app keyboard/VoiceOver/live-popover acceptance. Any GitHub App or CI
+  authentication strategy, polling and notifications require separate scope.
 
 ## 4. Reviews and relevant activity
 

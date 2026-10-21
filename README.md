@@ -3,22 +3,25 @@
 A lightweight, native macOS menu bar app for GitHub activity. The goal is to show
 pull requests, reviews, comments, and CI updates that need your attention.
 
-**Current status: Phase 4A — CI checks and pull request diff statistics.**
-Connect one GitHub.com account with multiple personal access tokens stored independently
-in macOS Keychain. Review / My PRs / Drafts show review information, file/addition/deletion
-totals and CI for the current PR head. **Checks passed does not mean Ready to merge**:
-reviews, conflicts and branch protection remain separate. CI availability depends on
-token access and GitHub's fine-grained PAT limitations; unavailable data never becomes
-success. Open PRs on GitHub or refresh with the button/⌘R. Results stay in memory with
-a 60-second freshness window on opening. Removing a token discards its exclusive results.
-Polling and notifications remain deferred. See [CI semantics and permissions](docs/checks.md),
-[Phase 4A validation](docs/phase-4a.md), [review semantics](docs/reviews.md), and
+**Current status: Phase 4B — Native Dashboard UX Refinement.**
+Connect one GitHub.com identity with multiple tokens stored independently in macOS
+Keychain. Review / My PRs / Drafts show clearer native PR rows, repository/owner
+identity, independent review context and compact file/addition/deletion totals.
+CI statuses are hidden from default rows, tooltips and VoiceOver while the Phase 4A
+CI query, domain and tests remain intact. Unavailable CI alone no longer raises a
+dashboard warning; real discovery/authentication failures and partial results remain
+visible. Review approval never establishes merge readiness.
+
+The popover adapts up to 460 points, keeps header/tabs/footer outside the scrolling
+list, and retains manual Refresh/⌘R and the 60-second on-open freshness policy.
+No background polling or notifications. See [Phase 4B design and validation](docs/phase-4b.md),
+[review semantics](docs/reviews.md), [retained CI implementation](docs/checks.md), and
 [discovery limitations](docs/discovery.md).
 
 ## Requirements
 
 - macOS 14 or later; Apple Silicon and Intel
-- Xcode 16 or later with Swift 6; Phase 4A validated with Xcode 27.1 / Swift 6.4
+- Xcode 16 or later with Swift 6; Phase 4B validated with Xcode 27.1 / Swift 6.4
 - A valid Apple Development signing identity and provisioning profile for real
   Keychain access (choose your development team in Xcode; no team is committed)
 

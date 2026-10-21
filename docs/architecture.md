@@ -170,3 +170,21 @@ partial errors retain strict source failure behavior. Metadata reconciliation us
 all newest observations to keep multi-token conflicts independent of order. No
 new request lifecycle, persisted private metadata, polling or dependency is added.
 See [detailed CI and diff policy](checks.md) and [validation](phase-4a.md).
+
+## Phase 4B presentation boundary
+
+`MenuBarView` retains the existing connection/dashboard lifecycle and owns local
+selection, focus and measured list height. `PullRequestRow` is shared by every
+inbox. The Foundation-only `PullRequestRowPresentation` projects identity, review
+or author context, diff totals, canonical links and accessibility descriptions;
+it deliberately does not project CI. Its focused tests compile in the existing
+unhosted target. `PullRequestEmptyPresentation` preserves distinct loading, empty
+and failed states. Shared spacing constants remain local to the native dashboard.
+
+The list alone scrolls; measured content fits shorter lists and remains bounded by
+420 points and the available screen height. A changed tab recreates only its
+scroll view, resetting scroll position without a new discovery request. Existing
+validated public owner-avatar lookup is reused with a native repository fallback.
+The CI implementation is unchanged. Only its default row presentation and warnings
+caused solely by `checkDataUnavailable` are suppressed; raw coverage metadata,
+real source errors, truncation and metadata conflicts remain. See [Phase 4B](phase-4b.md).
