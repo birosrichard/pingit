@@ -2,6 +2,8 @@ import AppKit
 import SwiftUI
 
 struct MenuBarView: View {
+    @Environment(\.openSettings) private var openSettings
+
     var body: some View {
         VStack(spacing: 0) {
             HStack(spacing: 10) {
@@ -46,6 +48,13 @@ struct MenuBarView: View {
             Divider()
 
             HStack {
+                Button("Settings…", systemImage: "gearshape") {
+                    // A menu bar interaction does not activate an agent app on its own.
+                    NSApplication.shared.activate(ignoringOtherApps: true)
+                    openSettings()
+                }
+                .keyboardShortcut(",")
+
                 Spacer()
 
                 Button("Quit GitPingly") {

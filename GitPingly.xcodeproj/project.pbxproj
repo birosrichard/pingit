@@ -5,11 +5,13 @@
     objectVersion = 56;
     objects = {
 /* Begin PBXBuildFile section */
+        A10000000000000000000003 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000007 /* SettingsView.swift */; };
         A10000000000000000000002 /* MenuBarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000006 /* MenuBarView.swift */; };
         A10000000000000000000001 /* GitPinglyApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000001 /* GitPinglyApp.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+        A20000000000000000000007 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
         A20000000000000000000006 /* MenuBarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarView.swift; sourceTree = "<group>"; };
         A20000000000000000000001 /* GitPinglyApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GitPinglyApp.swift; sourceTree = "<group>"; };
         A20000000000000000000002 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
@@ -23,7 +25,8 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
-        A40000000000000000000007 /* Features */ = {isa = PBXGroup; children = (A40000000000000000000008 /* MenuBar */); path = Features; sourceTree = "<group>"; };
+        A40000000000000000000009 /* Settings */ = {isa = PBXGroup; children = (A20000000000000000000007 /* SettingsView.swift */); path = Settings; sourceTree = "<group>"; };
+        A40000000000000000000007 /* Features */ = {isa = PBXGroup; children = (A40000000000000000000008 /* MenuBar */, A40000000000000000000009 /* Settings */); path = Features; sourceTree = "<group>"; };
         A40000000000000000000008 /* MenuBar */ = {isa = PBXGroup; children = (A20000000000000000000006 /* MenuBarView.swift */); path = MenuBar; sourceTree = "<group>"; };
         A40000000000000000000001 = {
             isa = PBXGroup;
@@ -83,7 +86,7 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
-        A70000000000000000000001 = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (A10000000000000000000001 /* GitPinglyApp.swift in Sources */, A10000000000000000000002 /* MenuBarView.swift in Sources */); runOnlyForDeploymentPostprocessing = 0; };
+        A70000000000000000000001 = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (A10000000000000000000001 /* GitPinglyApp.swift in Sources */, A10000000000000000000002 /* MenuBarView.swift in Sources */, A10000000000000000000003 /* SettingsView.swift in Sources */); runOnlyForDeploymentPostprocessing = 0; };
 /* End PBXSourcesBuildPhase section */
 
 /* Begin XCBuildConfiguration section */

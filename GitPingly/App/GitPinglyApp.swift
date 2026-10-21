@@ -7,5 +7,9 @@ struct GitPinglyApp: App {
             MenuBarView()
         }
         .menuBarExtraStyle(.window)
+
+        Settings {
+            SettingsView()
+        }
     }
 }
