@@ -312,6 +312,19 @@ struct NotificationDeliveryTests {
         f.coordinator.stop()
     }
 
+    @Test func assigningAnUnchangedPreferenceKeepsPendingDelivery() async throws {
+        let f = NotificationFixture()
+        f.preferences.enabled = true
+        f.service.holdStatus = true
+        f.coordinator.consume([try f.event()])
+        await f.wait { f.service.statusCalls == 1 }
+        f.preferences.enabled = true
+        #expect(f.coordinator.isDelivering)
+        f.service.releaseStatus(.authorized)
+        await f.finish()
+        #expect(f.service.delivered.count == 1)
+    }
+
     @Test func permissionIsRecheckedBetweenSubmissions() async throws {
         let f = NotificationFixture()
         f.preferences.enabled = true
