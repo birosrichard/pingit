@@ -1,6 +1,7 @@
 # Development roadmap
 
-Phases 1–3F, 4A (CI/diff metadata) and 4B (native dashboard refinement) are implemented.
+Phases 1–3F, 4A (CI/diff metadata), 4B (native dashboard refinement), and
+[4C (final dashboard polish)](phase-4c.md) are implemented.
 Further activity, background updates and distribution work remain separately scoped.
 Keep each phase independently buildable and validate before moving on.
 

@@ -3,7 +3,7 @@
 A lightweight, native macOS menu bar app for GitHub activity. The goal is to show
 pull requests, reviews, comments, and CI updates that need your attention.
 
-**Current status: Phase 4B — Native Dashboard UX Refinement.**
+**Current status: Phase 4C — Final Dashboard UI/UX Polish.**
 Connect one GitHub.com identity with multiple tokens stored independently in macOS
 Keychain. Review / My PRs / Drafts show clearer native PR rows, repository/owner
 identity, independent review context and compact file/addition/deletion totals.
@@ -12,9 +12,13 @@ CI query, domain and tests remain intact. Unavailable CI alone no longer raises 
 dashboard warning; real discovery/authentication failures and partial results remain
 visible. Review approval never establishes merge readiness.
 
-The popover retains its original fixed 440-point width, keeps header/tabs/footer outside the scrolling
-list, and retains manual Refresh/⌘R and the 60-second on-open freshness policy.
-No background polling or notifications. See [Phase 4B design and validation](docs/phase-4b.md),
+The popover retains its original fixed 440-point width, keeps header/tabs/footer
+outside the scrolling list, and retains manual Refresh/⌘R and the 60-second on-open
+freshness policy. Rows sit directly on the dashboard surface; native scrollbars
+have a separate content inset, counts use subtle badges, and drafts do not prompt
+for normal review. Submitted reviews and GitHub's authoritative data remain intact.
+No background polling or notifications. See [Phase 4C polish and validation](docs/phase-4c.md),
+[Phase 4B design and validation](docs/phase-4b.md),
 [review semantics](docs/reviews.md), [retained CI implementation](docs/checks.md), and
 [discovery limitations](docs/discovery.md).
 
