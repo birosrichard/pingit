@@ -153,7 +153,7 @@ struct GitHubConnectionTests {
         let http = MockHTTP()
         let connection = GitHubConnection(client: http.client, credentials: keychain.store)
         await connection.restore()
-        #expect(connection.errorMessage?.contains("Select a development team") == true)
+        #expect(connection.errorMessage?.contains("Signing & Capabilities") == true)
         #expect(connection.account == nil)
     }
 

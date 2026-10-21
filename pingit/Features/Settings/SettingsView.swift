@@ -61,7 +61,7 @@ struct GitHubConnectionControls: View {
                     .disabled(connection.isConnecting)
                 }
 
-                Text("Create a fine-grained token in GitHub Settings → Developer settings → Personal access tokens. Choose your account, set an expiration, use Public repositories, and leave additional permissions unset. No write permissions are needed.")
+                Text("Create a fine-grained token in GitHub Settings → Developer settings → Personal access tokens. Choose your account and set an expiration. Public repositories is enough for account validation; All repositories is also allowed. Leave additional permissions unset. No write permissions are needed.")
                     .font(.callout)
                     .foregroundStyle(.secondary)
 

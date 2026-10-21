@@ -50,11 +50,12 @@ The successful `/user` response proves identity, not repository/organization acc
 Protection Keychain. One generic password item uses the bundle-specific service
 and fixed account name. It is nonsynchronizing and accessible only when unlocked,
 with `ThisDeviceOnly` protection. Duplicate items update atomically; a missing item
-on removal is success. The store uses the signed app's default private Keychain group,
-provided by its application identifier. No explicit Keychain Sharing entitlement is
-needed for this single app; restricted groups would prevent ad hoc builds launching.
-Real credential use requires an Apple development team and signing profile; ad hoc UI builds receive a clear signing error. There is no
-legacy Keychain or plaintext fallback. No development team/credentials are committed.
+on removal is success. The provisioned app requests its own Keychain access group
+through Keychain Sharing. Ad hoc UI builds use separate preview entitlements without
+that restricted group, so they can launch but report a signing error for Keychain.
+Real credential use requires a valid Apple Development signing identity and profile.
+There is no legacy Keychain or plaintext fallback. No development team/credentials
+are committed.
 
 App Sandbox permits outbound networking only. It grants no file access, network
 server access, or temporary exceptions. ATS remains enabled with no overrides.

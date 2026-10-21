@@ -13,14 +13,21 @@ review tracking, polling, and notifications are not implemented.
 
 - macOS 14 or later; Apple Silicon and Intel
 - Xcode 16 or later with Swift 6; validated with Xcode 26.3 / Swift 6.2.4
-- An Apple Development signing identity and provisioning profile for real Keychain
-  access (choose your development team in Xcode; no team is committed)
+- A valid Apple Development signing identity and provisioning profile for real
+  Keychain access (choose your development team in Xcode; no team is committed)
 
 ## Build and run
 
 Open `pingit.xcodeproj`, select the shared **pingit** scheme and **My Mac**. Under
-Signing & Capabilities, select your development team, keep automatic signing
-and App Sandbox enabled, then Run (⌘R). The app appears only in the menu bar; no main window opens at launch.
+Signing & Capabilities, select your development team, keep automatic signing,
+Keychain Sharing, and App Sandbox enabled. Xcode should show a provisioning
+profile for the app. Then Run (⌘R). The app appears only in the menu bar; no
+main window opens at launch. If Xcode shows **Provisioning Profile: None Required**
+or Keychain reports a signing error, check that a valid Apple Development signing
+identity is installed in Keychain Access and let Xcode create a profile for this
+bundle ID. If Xcode says your Mac is not registered with the selected developer
+account, resolve that in Xcode's Signing & Capabilities before rebuilding.
+Selecting a team alone does not provide Keychain access.
 
 If your shell uses Command Line Tools, select Xcode for these commands:
 
@@ -34,14 +41,14 @@ To build for UI inspection without selecting an Apple Developer team:
 xcodebuild -project pingit.xcodeproj -scheme pingit \
   -configuration Debug -destination 'platform=macOS,arch=arm64' \
   -derivedDataPath build/ValidationDebug \
+  CODE_SIGN_ENTITLEMENTS=pingit/Resources/pingit-preview.entitlements \
   CODE_SIGN_IDENTITY=- CODE_SIGNING_ALLOWED=YES build
 open build/ValidationDebug/Build/Products/Debug/pingit.app
 ```
 
-Use `arch=x86_64` on Intel. Ad hoc signing supports builds and mocked tests, but
-cannot supply a provisioned Keychain identity. The app reports an actionable
-Keychain error when that identity is missing. Use a development-team-signed build
-to connect a real account. Do not add broad entitlements or a plaintext fallback.
+Use `arch=x86_64` on Intel. The preview entitlements let an ad hoc build launch
+without a provisioning profile; its Keychain connection will report a signing
+error. Use a provisioned development build to connect a real account.
 
 Bundle identity (`dev.biros.pingit`), version, build number, and minimum macOS
 version live in `Configuration/App.xcconfig`. A bundle-ID override also changes
@@ -57,8 +64,9 @@ hardened runtime for ad hoc signing. Distribution/notarization is future work.
    GitHub Settings → Developer settings → Personal access tokens → Fine-grained
    tokens → Generate new token.
 3. Give the token a name and expiration, choose your own account as resource owner,
-   choose **Public repositories**, and leave additional permissions unset. This
-   phase needs no write permissions or private repository access.
+   choose **Public repositories** or **All repositories**, and leave additional
+   permissions unset. Public repositories is sufficient for account validation;
+   All repositories is also allowed and does not itself grant repository permissions.
 4. Paste the token into the secure field and click **Connect**. pingit validates
    it using authenticated `GET https://api.github.com/user`, then saves it to
    macOS Keychain. A successful connection shows your username and avatar.
@@ -82,8 +90,8 @@ when you choose. A failed Keychain deletion remains visible and can be retried.
 - Credentials persist exclusively in the macOS Data Protection Keychain, with
   `kSecAttrAccessibleWhenUnlockedThisDeviceOnly` and synchronization disabled.
   The service is `<bundle identifier>.github`, account `personal-access-token`,
-  in the signed app's default private Keychain group. No Keychain Sharing entitlement
-  is requested; Xcode supplies the app identity for provisioned builds.
+  in the provisioned app-specific Keychain access group. The development build
+  requests this group through Keychain Sharing; ad hoc previews omit it.
 - Tokens exist transiently in memory during entry/requests. The input clears on
   submission, successful connection, and closing Settings. Saved tokens are never
   loaded back into the field or retained in the observable UI model.
@@ -108,6 +116,7 @@ Run the mocked unit tests (no real token or user Keychain access):
 xcodebuild -project pingit.xcodeproj -scheme pingit \
   -configuration Debug -destination 'platform=macOS,arch=arm64' \
   -derivedDataPath build/DerivedData \
+  CODE_SIGN_ENTITLEMENTS=pingit/Resources/pingit-preview.entitlements \
   CODE_SIGN_IDENTITY=- CODE_SIGNING_ALLOWED=YES test
 ```
 
@@ -124,6 +133,7 @@ Build a universal Release app, then check both products:
 xcodebuild -project pingit.xcodeproj -scheme pingit \
   -configuration Release -destination 'generic/platform=macOS' \
   -derivedDataPath build/ValidationRelease ARCHS='arm64 x86_64' ONLY_ACTIVE_ARCH=NO \
+  CODE_SIGN_ENTITLEMENTS=pingit/Resources/pingit-preview.entitlements \
   CODE_SIGN_IDENTITY=- CODE_SIGNING_ALLOWED=YES build
 sh scripts/validate-app.sh build/ValidationDebug/Build/Products/Debug/pingit.app
 sh scripts/validate-app.sh build/ValidationRelease/Build/Products/Release/pingit.app

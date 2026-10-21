@@ -101,7 +101,7 @@
                 BuildIndependentTargetsInParallel = YES;
                 LastSwiftUpdateCheck = 2630;
                 LastUpgradeCheck = 2630;
-                TargetAttributes = {A50000000000000000000001 = {CreatedOnToolsVersion = 26.3; SystemCapabilities = {com.apple.Sandbox = {enabled = 1; }; }; }; };
+                TargetAttributes = {A50000000000000000000001 = {CreatedOnToolsVersion = 26.3; SystemCapabilities = {com.apple.Keychain = {enabled = 1; }; com.apple.Sandbox = {enabled = 1; }; }; }; };
             };
             buildConfigurationList = A80000000000000000000001;
             compatibilityVersion = "Xcode 14.0";
