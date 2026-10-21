@@ -194,3 +194,52 @@ struct PullRequestReviewPresentationTests {
         #expect(result.detail.contains("overall review decision"))
     }
 }
+
+struct PullRequestDiffStatisticsTests {
+    @Test func zeroAndSingularAndLargeCounts() throws {
+        let zero = try #require(GitHubDiffStatistics(changedFiles: 0, additions: 0, deletions: 0))
+        #expect(zero.filesLabel == "0 files" && zero.additionsLabel == "+0" && zero.deletionsLabel == "−0")
+        let one = try #require(GitHubDiffStatistics(changedFiles: 1, additions: 142, deletions: 28))
+        #expect(one.filesLabel == "1 file")
+        #expect(one.accessibilityLabel == "1 file changed, 142 additions, 28 deletions")
+        let large = try #require(GitHubDiffStatistics(changedFiles: 1200, additions: 1500000, deletions: 28000))
+        #expect(large.filesLabel == "1.2K files")
+        #expect(large.additionsLabel == "+1.5M" && large.deletionsLabel == "−28K")
+        #expect(large.accessibilityLabel.contains("1500000 additions"))
+    }
+
+    @Test func unavailableAndInvalidCounts() {
+        #expect(GitHubDiffStatistics(changedFiles: nil, additions: 0, deletions: 0) == nil)
+        #expect(GitHubDiffStatistics(changedFiles: 0, additions: nil, deletions: 0) == nil)
+        #expect(GitHubDiffStatistics(changedFiles: 0, additions: 0, deletions: nil) == nil)
+        #expect(GitHubDiffStatistics(changedFiles: -1, additions: 0, deletions: 0) == nil)
+    }
+}
+
+extension PullRequestDiffStatisticsTests {
+    @Test func duplicateDiffMetadataUsesOnlyLatestSnapshotAndRejectsConflicts() {
+        func pr(head: String, updated: TimeInterval = 1, additions: Int?) -> GitHubPullRequest {
+            GitHubPullRequest(id: "pr", number: 1, title: "Title", url: URL(string: "https://github.com/a/b/pull/1")!,
+                repository: .init(id: "r", nameWithOwner: "a/b", url: URL(string: "https://github.com/a/b")!),
+                authorLogin: nil, isDraft: false, createdAt: .distantPast, updatedAt: Date(timeIntervalSince1970: updated),
+                reviewStatus: nil, latestReviews: nil, checkStatus: nil, reviewRequests: nil,
+                headRefOid: head, diffStatistics: GitHubDiffStatistics(changedFiles: 1, additions: additions, deletions: 0))
+        }
+        func merge(_ values: [GitHubPullRequest]) -> GitHubPullRequestDiscoveryResult {
+            .merged(values.map { .init(pullRequests: [$0], truncationReasons: [], coverageLimitations: []) })
+        }
+        let complete = pr(head: "a", additions: 12)
+        let missing = pr(head: "a", additions: nil)
+        #expect(merge([complete, missing]).pullRequests.first?.diffStatistics?.additions == 12)
+        #expect(merge([missing, complete]).pullRequests.first?.diffStatistics?.additions == 12)
+        let newer = pr(head: "b", updated: 2, additions: nil)
+        for values in [[complete, newer], [newer, complete]] {
+            #expect(merge(values).pullRequests.first?.headRefOid == "b")
+            #expect(merge(values).pullRequests.first?.diffStatistics == nil)
+        }
+        #expect(merge([complete, pr(head: "b", additions: 12)]).pullRequests.first?.headRefOid == nil)
+        let conflict = merge([complete, pr(head: "a", additions: 13), complete])
+        #expect(conflict.pullRequests.first?.diffStatistics == nil)
+        #expect(conflict.coverageLimitations.contains(.conflictingMetadata))
+    }
+}

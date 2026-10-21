@@ -42,6 +42,8 @@ struct GitHubPullRequest: Codable, Equatable, Sendable, Identifiable {
     let latestReviews: GitHubLatestReviews?
     let checkStatus: GitHubCheckStatus?
     let reviewRequests: [GitHubReviewRequest]?
+    var headRefOid: String? = nil
+    var diffStatistics: GitHubDiffStatistics? = nil
 
     // Revalidate at the browser boundary, including values decoded outside discovery.
     var browserURL: URL? {
@@ -174,5 +176,31 @@ struct PullRequestReviewPresentation: Equatable {
 extension GitHubPullRequest {
     var reviewPresentation: PullRequestReviewPresentation {
         PullRequestReviewPresentation(status: reviewStatus, reviews: latestReviews)
+    }
+}
+
+// These are PR totals, never sums of downloaded files or commits.
+struct GitHubDiffStatistics: Codable, Equatable, Sendable {
+    let changedFiles: Int
+    let additions: Int
+    let deletions: Int
+
+    init?(changedFiles: Int?, additions: Int?, deletions: Int?) {
+        guard let changedFiles, let additions, let deletions,
+              changedFiles >= 0, additions >= 0, deletions >= 0 else { return nil }
+        self.changedFiles = changedFiles
+        self.additions = additions
+        self.deletions = deletions
+    }
+
+    var filesLabel: String { "\(Self.compact(changedFiles)) \(changedFiles == 1 ? "file" : "files")" }
+    var additionsLabel: String { "+\(Self.compact(additions))" }
+    var deletionsLabel: String { "−\(Self.compact(deletions))" }
+    var accessibilityLabel: String {
+        "\(changedFiles) \(changedFiles == 1 ? "file" : "files") changed, \(additions) additions, \(deletions) deletions"
+    }
+
+    private static func compact(_ value: Int) -> String {
+        value.formatted(.number.notation(.compactName).precision(.fractionLength(0...1)).locale(Locale(identifier: "en_US")))
     }
 }

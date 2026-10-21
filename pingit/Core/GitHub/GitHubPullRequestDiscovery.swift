@@ -200,7 +200,23 @@ extension GitHubPullRequestDiscoveryResult {
                     reviewRequests: conflictingRequests.contains(pr.id) ? nil : newest.reviewRequests ?? (sameSnapshot ? other.reviewRequests : nil))
             }
         }
-        return Self(pullRequests: byID.values.sorted {
+        let observations = Dictionary(grouping: results.flatMap(\.pullRequests), by: \.id)
+        let enriched = byID.values.map { value in
+            var value = value
+            let current = observations[value.id, default: []].filter { $0.updatedAt == value.updatedAt }
+            let heads = Set(current.compactMap(\.headRefOid))
+            let stats = current.compactMap(\.diffStatistics)
+            if heads.count > 1 || stats.contains(where: { $0 != stats.first }) {
+                value.headRefOid = heads.count == 1 ? heads.first : nil
+                value.diffStatistics = nil
+                coverage.insert(.conflictingMetadata)
+            } else {
+                value.headRefOid = heads.first
+                value.diffStatistics = stats.first
+            }
+            return value
+        }
+        return Self(pullRequests: enriched.sorted {
             $0.updatedAt == $1.updatedAt ? $0.id < $1.id : $0.updatedAt > $1.updatedAt
         }, truncationReasons: results.reduce(into: []) { $0.formUnion($1.truncationReasons) },
                     coverageLimitations: coverage)

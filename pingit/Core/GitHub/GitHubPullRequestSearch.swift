@@ -30,6 +30,10 @@ struct GitHubPullRequestSearchResponse: Decodable, Sendable {
         let isDraft: Bool
         let createdAt: String
         let updatedAt: String
+        let headRefOid: String?
+        let changedFiles: Int?
+        let additions: Int?
+        let deletions: Int?
         let reviewDecision: String?
         let latestReviews: LatestReviews?
         let reviewRequests: ReviewRequests?
@@ -53,7 +57,9 @@ struct GitHubPullRequestSearchResponse: Decodable, Sendable {
                 reviewStatus: overallReviewStatus,
                 latestReviews: latestReviews?.domain() ?? GitHubLatestReviews(reviews: [], limitations: [.unavailable]),
                 checkStatus: nil,
-                reviewRequests: reviewRequests?.pageInfo.hasNextPage == true ? nil : requests
+                reviewRequests: reviewRequests?.pageInfo.hasNextPage == true ? nil : requests,
+                headRefOid: headRefOid,
+                diffStatistics: GitHubDiffStatistics(changedFiles: changedFiles, additions: additions, deletions: deletions)
             )
         }
 
@@ -169,6 +175,7 @@ struct GitHubPullRequestSearchResponse: Decodable, Sendable {
           __typename
           ... on PullRequest {
             id number title url state isDraft createdAt updatedAt
+            headRefOid changedFiles additions deletions
             reviewDecision
             latestReviews(first: 50) {
               pageInfo { hasNextPage endCursor }

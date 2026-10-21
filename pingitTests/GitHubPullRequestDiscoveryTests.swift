@@ -448,6 +448,25 @@ struct GitHubPullRequestDiscoveryTests {
         await #expect(throws: CancellationError.self) { try await task.value }
     }
 
+    @Test func diffTotalsDecodeWithoutFilesOrExtraRequests() async throws {
+        var value = node()
+        value["headRefOid"] = String(repeating: "a", count: 40)
+        value["changedFiles"] = 3; value["additions"] = 142; value["deletions"] = 28
+        let script = Script([try payload([value])])
+        let result = try await authored(script.http)
+        #expect(result.pullRequests.first?.diffStatistics == GitHubDiffStatistics(changedFiles: 3, additions: 142, deletions: 28))
+        #expect(result.pullRequests.first?.headRefOid == String(repeating: "a", count: 40))
+        #expect(script.requests.count == 1)
+        #expect(script.requests.first?.query.contains("headRefOid changedFiles additions deletions") == true)
+        #expect(script.requests.first?.query.contains("files(") == false)
+    }
+
+    @Test func missingDiffFieldsNeverBecomeZero() async throws {
+        var value = node()
+        value["changedFiles"] = 0; value["additions"] = 0
+        #expect(try await authored(Script([payload([value])]).http).pullRequests.first?.diffStatistics == nil)
+    }
+
     private func node(
         _ number: Int = 1, author: String? = "octocat", draft: Bool = false, state: String = "OPEN",
         updated: String = "2026-10-21T09:00:00Z", reviewers: [String]? = nil, moreReviewers: Bool = false
