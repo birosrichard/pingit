@@ -150,25 +150,21 @@ struct MenuBarView: View {
                             }
                         }
                     }
-                    .padding(4)
-                    .padding(.trailing, 8) // Leave room for macOS overlay scroll indicators.
+                    .padding(.vertical, 4)
                     .background {
                         GeometryReader { geometry in
                             Color.clear.preference(key: PullRequestListHeightKey.self, value: geometry.size.height)
                         }
                     }
                 }
+                .scrollIndicators(.automatic)
+                .contentMargins(.trailing, 12, for: .scrollContent)
                 .onPreferenceChange(PullRequestListHeightKey.self) { height in
                     if height > 0 { listContentHeight = height }
                 }
                 .id(selection)
                 .frame(height: DashboardLayout.listHeight(rowCount: pullRequests.count, availableScreenHeight: screenFrame.height,
                                                         contentHeight: listContentHeight))
-                .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 12))
-                .overlay {
-                    RoundedRectangle(cornerRadius: 12).strokeBorder(.quaternary.opacity(0.6))
-                }
-                .clipShape(RoundedRectangle(cornerRadius: 12))
                 .padding(.horizontal, DashboardLayout.listInset)
                 .padding(.bottom, 16)
             }

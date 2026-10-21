@@ -66,7 +66,7 @@ struct PullRequestEmptyPresentation: Equatable {
 enum DashboardLayout {
     static let width: CGFloat = 440
     static let horizontalInset: CGFloat = 20
-    static let listInset: CGFloat = 16
+    static let listInset: CGFloat = 8
     static let rowInset: CGFloat = 12
     static let avatarSize: CGFloat = 36
     static let avatarSpacing: CGFloat = 12
