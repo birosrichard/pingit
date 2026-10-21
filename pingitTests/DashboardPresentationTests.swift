@@ -68,6 +68,7 @@ struct DashboardPresentationTests {
         let display = PullRequestRowPresentation(pr: value, inbox: .drafts)
         #expect(display.diff?.filesLabel == "1 file" && display.diff?.additionsLabel == "+1.5M")
         #expect(display.accessibilityLabel.contains("Draft pull request"))
+        #expect(!display.accessibilityLabel.contains(". ."))
         #expect(display.accessibilityLabel.contains("1500000 additions, 28000 deletions"))
     }
 
@@ -92,6 +93,7 @@ struct DashboardPresentationTests {
         #expect(display.review == PullRequestReviewPresentation(status: nil, reviews: reviews))
         #expect(display.review?.label != "Review required")
         #expect(display.help.contains("Latest reviews:"))
+        #expect(!display.help.contains("No authoritative overall review decision is available"))
         #expect(value.latestReviews == reviews && value.reviewStatus == .reviewRequired)
     }
 

@@ -89,7 +89,7 @@ struct PullRequestRow: View {
             Label(review.label, systemImage: review.systemImage)
                 .foregroundStyle(metadataColor(review.tone))
                 .lineLimit(1)
-                .help(review.detail)
+                .help(presentation.help)
         }
     }
 

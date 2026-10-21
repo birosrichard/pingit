@@ -31,7 +31,7 @@ struct PullRequestRowPresentation: Equatable {
         }
         diff = pr.diffStatistics
         browserURL = pr.browserURL
-        let context = authorLabel ?? review?.label ?? ""
+        let context = (authorLabel ?? review?.label).map { "\($0). " } ?? ""
         let detail: String
         if inbox == .review {
             detail = "Pull request author: \(pr.authorLogin ?? "unavailable")."
@@ -41,7 +41,7 @@ struct PullRequestRowPresentation: Equatable {
             detail = pr.reviewPresentation.detail
         }
         let diffDescription = diff?.accessibilityLabel ?? "Diff statistics unavailable"
-        accessibilityLabel = "\(pr.isDraft ? "Draft pull request" : "Pull request") \(pr.number). \(title). \(repositoryLabel). \(context). \(detail) \(diffDescription)."
+        accessibilityLabel = "\(pr.isDraft ? "Draft pull request" : "Pull request") \(pr.number). \(title). \(repositoryLabel). \(context)\(detail) \(diffDescription)."
         help = "\(title)\n\(repositoryLabel)\n\(detail)\n\(diffDescription)\n\(browserURL == nil ? "GitHub link unavailable" : "Open on GitHub")"
     }
 
