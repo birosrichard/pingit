@@ -1,3 +1,8 @@
+> Phase 3E: each method below is invoked separately for every configured token.
+> Pagination bounds and errors remain per token. The dashboard schedules up to two
+> token scopes concurrently and merges their node IDs within each semantic section.
+> See [aggregation and merge policy](tokens.md). Coverage never implies all owner repositories.
+
 # Pull request discovery (Phases 3B–3D)
 
 `GitHubPullRequestDiscovery` fetches data on explicit invocation. The Phase 3D

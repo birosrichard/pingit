@@ -8,7 +8,7 @@ and no external dependencies.
 - `pingit/Core/Authentication/` owns the shared API client, Keychain store, and connection state.
 - `pingit/Core/GitHub/` holds PR domain values, independent of SwiftUI and transport envelopes.
 - `pingit/Features/MenuBar/` owns the native PR dashboard, popover, and connection status.
-- `pingit/Features/Settings/` owns native connection setup and the shared account view.
+- `pingit/Features/Settings/` owns native connection setup and secure token management.
 - `pingit/Resources/` holds Info.plist and sandbox entitlements.
 - `pingitTests/` contains mocked authentication, discovery, review, and dashboard lifecycle tests.
 - `Configuration/App.xcconfig` centralizes bundle identity, versions, and build policy.
@@ -20,28 +20,30 @@ restoration task independently of either view appearing, and injects the same
 observable object into the window-style `MenuBarExtra` and native `Settings` scene.
 There is no `WindowGroup`. `LSUIElement` avoids a persistent Dock icon/main window.
 
-`GitHubConnection` is `@MainActor` and `@Observable`. Only nonsecret account data,
-busy state, credential presence, and sanitized error text reach the views. Connect
-validates before saving; a storage failure cannot become a connected state.
-Restoration reads Keychain and validates once per launch. Transient failures retain
-the credential for explicit retry. Unauthorized saved tokens are deleted, with
-removal errors reported. Disconnect only clears account state after deletion succeeds.
-Duplicate attempts/disconnect are blocked during validation; cancellation cannot
-commit a validated account/token. There is no background retry or polling.
+`GitHubConnection` is `@MainActor` and `@Observable`, owning the connection list
+and one dashboard. Each connection has a stable UUID, optional authenticated GitHub
+user ID/login, configured owner label, validation status/date, and a credential
+reference. All connections belong to one identity. Owner labels are user supplied,
+not inferred from `/user`. Failed saved credentials remain replaceable/removable.
 
-The shared `GitHubConnectionControls` view holds only an unsaved token draft.
-Settings embeds it in its connection section; the menu bar’s **Connect GitHub**
-CTA opens the same controls in a scrollable panel with a Back action. Submission
-clears the draft before the asynchronous attempt; successful connection and view disappearance clear it too.
-The connected view never reads a token. The menu bar shows the shared dashboard,
-Settings, Refresh (⌘R), and Quit. Opening Settings activates the agent app
-through AppKit. These UI actions remain on the main actor.
+`GitHubConnectionMetadata` persists only non-secret metadata in sandboxed UserDefaults.
+Migration and deletion intent survive interruptions; Keychain holds every token.
+The [token storage document](tokens.md) specifies ordering, recovery and limitations.
+Adding/replacing validates before saving. Removal invalidates the current generation;
+cancelled or late validation cannot restore a removed connection. Failed deletion
+preserves the current UI session for retry. Duplicate validations are blocked.
+
+`GitHubConnectionControls` displays native rows with owner, username, validation status,
+Replace and confirmed Remove actions. The add flow holds an unsaved secure token draft,
+clears it before submission/disappearance, and never reloads saved credentials into
+views. Settings and the disconnected popover share these controls. Menu bar Settings,
+Refresh (⌘R), and Quit actions remain on the main actor. No polling/retry loop is added.
 
 ## API and credential boundaries
 
 `GitHubClient` uses Foundation URLSession and a fixed HTTPS `GET /user` endpoint.
 Its ephemeral production session has no disk cache/credential storage or cookie
-acceptance, bounded timeouts, and rejects every redirect. It decodes only username
+acceptance, bounded timeouts, and rejects every redirect. It decodes user ID when available, username,
 and HTTPS avatar URL. HTTP authentication, forbidden, primary/secondary rate limit,
 network, and unexpected-response failures become fixed messages; raw errors and
 server bodies never reach the UI. Avatar requests are separate and unauthenticated.
@@ -84,14 +86,14 @@ truncation. `PullRequestDashboard` reuses this service for both sections. See
 [discovery](discovery.md) for query semantics, request bounds, permissions and limitations.
 
 `KeychainCredentialStore` uses the Security SecItem APIs against the macOS Data
-Protection Keychain. One generic password item uses the bundle-specific service
-and fixed account name. It is nonsynchronizing and accessible only when unlocked,
+Protection Keychain. Each generic password item uses the bundle-specific service
+and an independent UUID account reference. It is nonsynchronizing and accessible only when unlocked,
 with `ThisDeviceOnly` protection. Duplicate items update atomically; a missing item
 on removal is success. The provisioned app requests its own Keychain access group
 through Keychain Sharing. Ad hoc UI builds use separate preview entitlements without
 that restricted group, so they can launch but report a signing error for Keychain.
 Real credential use requires a valid Apple Development signing identity and profile.
-There is no legacy Keychain or plaintext fallback. No development team/credentials
+The prior single-token Data Protection item is migrated conservatively; there is no plaintext fallback. No development team/credentials
 are committed.
 
 App Sandbox permits outbound networking only. It grants no file access, network
@@ -116,24 +118,25 @@ check catches macOS launch-time rejection; static signature checks alone are ins
 
 ## Dashboard state and refresh
 
-`GitHubConnection` owns a main-actor observable `PullRequestDashboard`, with the same
-Keychain store and discovery client. Successful account validation resets its session;
-successful disconnect cancels tasks and clears account-specific results immediately.
-The popover triggers loading on appearance/account change, using a 60-second freshness
-window since the last attempt. Explicit Refresh bypasses it; duplicate requests are
-ignored. An account/refresh generation and cancellation checks reject late responses.
+`PullRequestDashboard` keeps per-connection, per-section results/errors/coverage and
+success timestamps. Refresh loads each credential once and schedules at most two
+connection workers (two concurrent section queries per worker). The stateless client
+receives that token explicitly on every page; no global Authorization/rate-limit state
+exists. A scope's failure retains its prior in-memory data and never becomes a
+successful empty result. Results from other scopes still publish independently.
 
-Authored and direct-review discovery run concurrently and publish separate results,
-loading phases, sanitized errors, last-success dates, and coverage. Successful data
-remains visible during refresh/failure. Token access and networking stay outside views;
-the credential is read once per refresh, never published to observation. Nothing
-persists PR data. Native Links revalidate API URLs before becoming activatable;
-display metadata never constructs a URL. See [dashboard](dashboard.md) for
-lifecycle, accessibility, tests, live validation evidence, and remaining manual checks.
+Aggregated lists merge by PR node ID separately within each section; conflicts remain
+unknown and warn about incomplete metadata. Removal immediately recomputes the union
+from remaining sources; replacement drops its old source cache. Generation and
+cancellation checks reject stale responses. Opening uses the existing 60-second
+freshness threshold; explicit refresh and connection changes bypass it. If the
+popover opens during restore, discovery starts when connections arrive. A full
+disconnect clears results and starts the next session idle. No private PR data is
+persisted. See [merge/lifecycle policy](tokens.md) and [dashboard](dashboard.md).
 
 ## Future boundaries
 
-Phases 1, 2, 3A, 3B, 3C and 3D are implemented. Successful account validation
+Phases 1, 2, 3A, 3B, 3C, 3D and 3E are implemented. Successful account validation
 must never imply complete repository access. Polling and notifications belong
 outside view lifetimes and must stop on disconnect/quit. Preferences, repository
 selection, multiple accounts, OAuth, and packaging are out of this phase.

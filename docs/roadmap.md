@@ -1,6 +1,6 @@
 # Development roadmap
 
-Phases 1, 2, 3A, 3B, 3C and 3D are implemented. Phases 4–8 remain planned.
+Phases 1, 2, 3A, 3B, 3C, 3D and 3E are implemented. Phases 4–8 remain planned.
 Keep each phase independently buildable and validate before moving on.
 
 ## 1. Project foundation
@@ -62,6 +62,16 @@ Keep each phase independently buildable and validate before moving on.
   confirms authored results and empty direct requests; full visibility/nonempty live direct
   requests and UI interaction/accessibility still need the acceptance checklist.
 - See [dashboard behavior and validation](dashboard.md). No CI, polling, notifications, or GitHub writes.
+
+### 3E. Multiple fine-grained GitHub tokens — implemented
+
+- One GitHub identity, independent configured owner scopes, secure add/replace/remove.
+- Verified, restartable migration from the existing Keychain item without re-entry.
+- Bounded concurrent discovery, node-ID merging, per-scope coverage/errors and stale data.
+- Generation guards reject responses after token removal/replacement; no persistent PR cache.
+- Automated tests, signed arm64 Debug validation and manual two-token checklist are
+  recorded in [token setup and limitations](tokens.md). Live scope coverage remains manual.
+- No multi-account support, OAuth, CI, polling, notifications or GitHub writes.
 
 ## 4. Reviews and relevant activity
 

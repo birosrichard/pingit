@@ -3,12 +3,12 @@
 A lightweight, native macOS menu bar app for GitHub activity. The goal is to show
 pull requests, reviews, comments, and CI updates that need your attention.
 
-**Current status: Phase 3D — Live Pull Request Dashboard.** Connect one GitHub.com
-account with a personal access token stored in macOS Keychain. Open the menu bar
+**Current status: Phase 3E — Multiple Fine-Grained GitHub Tokens.** Connect one GitHub.com
+account with multiple personal access tokens stored independently in macOS Keychain. Open the menu bar
 to see active direct review requests and authored open PRs, review decisions,
 drafts, counts, timestamps, and repository visibility limits. Open PRs on GitHub,
 or refresh with the button/⌘R. Results stay in memory, refresh after a 60-second
-freshness window on opening, and clear on disconnect. CI, polling, and notifications
+freshness window on opening. Removing a token discards its exclusive results. CI, polling, and notifications
 remain deferred. See [dashboard behavior and validation](docs/dashboard.md),
 [review semantics](docs/reviews.md), and
 [discovery permissions and limitations](docs/discovery.md).
@@ -16,7 +16,7 @@ remain deferred. See [dashboard behavior and validation](docs/dashboard.md),
 ## Requirements
 
 - macOS 14 or later; Apple Silicon and Intel
-- Xcode 16 or later with Swift 6; Phase 3D validated with Xcode 27.1 / Swift 6.4
+- Xcode 16 or later with Swift 6; Phase 3E validated with Xcode 27.1 / Swift 6.4
 - A valid Apple Development signing identity and provisioning profile for real
   Keychain access (choose your development team in Xcode; no team is committed)
 
@@ -62,40 +62,40 @@ hardened runtime for ad hoc signing. Distribution/notarization is future work.
 
 ## Connect GitHub
 
-1. Click **Connect GitHub** in the menu bar popover to enter your token directly.
-   The same connection controls are also available in **Settings…**.
-2. Follow [GitHub's fine-grained token instructions](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens#creating-a-fine-grained-personal-access-token):
-   GitHub Settings → Developer settings → Personal access tokens → Fine-grained
-   tokens → Generate new token.
-3. Give the token a name and expiration, choose your own account as resource owner,
-   choose **Public repositories** or **All repositories**, and leave additional
-   permissions unset. Public repositories is sufficient for account validation;
-   All repositories is also allowed and does not itself grant repository permissions.
-4. Paste the token into the secure field and click **Connect**. pingit validates
-   it using authenticated `GET https://api.github.com/user`, then saves it to
-   macOS Keychain. A successful connection shows your username and avatar.
-5. Click **Disconnect** to remove the saved credential. This removes the local
-   copy; it does not revoke the token on GitHub. Revoke it in GitHub Settings if
-   you no longer need it anywhere.
+1. Open **Settings… → GitHub tokens → Add GitHub token**, or use **Connect GitHub**
+   in the disconnected menu bar popover.
+2. Create a [fine-grained token](https://github.com/settings/personal-access-tokens/new)
+   with an expiration. Select the intended resource owner and repositories.
+   For private PRs grant **Pull requests: Read-only** and accompanying
+   **Metadata: Read-only**. No write permissions are needed.
+3. Enter a resource-owner label (for example `birosrichard`), paste into the secure
+   token field, and choose **Validate and add**. Validation calls `GET /user` before
+   saving. The configured owner remains explicitly unverified.
+4. Add another token with owner label `apify` for organization repositories. Both
+   tokens must authenticate the same GitHub user; duplicate owner labels and tokens
+   are rejected. GitHub user ID is compared when available, otherwise login.
+5. **Replace token** validates a replacement without overwriting the old credential
+   first. **Remove** asks for confirmation and deletes only that local connection;
+   revoke the token separately on GitHub if it is no longer needed anywhere.
 
-GitHub documents that [`GET /user`](https://docs.github.com/en/rest/users/users#get-the-authenticated-user)
-requires no additional fine-grained permissions. Successful validation establishes
-account identity; it does **not** prove access to private repositories or
-organization resources. For private PRs, select the required repositories and grant
-**Pull requests: Read-only** (with accompanying Metadata read access). Organization
-resources also require the correct resource owner, permitted token policy, and any
-required approval. Existing saved tokens are not upgraded. See
-[discovery permissions](docs/discovery.md) for fine-grained token visibility limits.
+The dashboard combines token-visible PRs and deduplicates each section by GitHub
+node ID. Authentication does not verify a token's resource owner, private repository
+permissions, or organization approval. Pending approval/access restrictions may
+hide private repositories without a search error. Empty results never prove complete
+coverage. Each failed scope has a named error; successful scopes remain usable.
 
-At startup, an invalid/expired saved token is removed. Offline, rate-limit, and
-server failures retain the credential; **Retry saved connection** revalidates it
-when you choose. A failed Keychain deletion remains visible and can be retried.
+Existing users migrate automatically without re-entering a token. Invalid, revoked,
+or expired saved tokens remain available for explicit replacement/removal. Offline,
+permission and rate-limit failures also retain credentials. **Retry saved connections**
+revalidates without automatically retrying repeatedly.
+
+See [multi-token storage, merge policy, validation and manual checks](docs/tokens.md).
 
 ## Security
 
 - Credentials persist exclusively in the macOS Data Protection Keychain, with
   `kSecAttrAccessibleWhenUnlockedThisDeviceOnly` and synchronization disabled.
-  The service is `<bundle identifier>.github`, account `personal-access-token`,
+  The service is `<bundle identifier>.github`, with separate `connection-<UUID>` accounts,
   in the provisioned app-specific Keychain access group. The development build
   requests this group through Keychain Sharing; ad hoc previews omit it.
 - Tokens exist transiently in memory during entry/requests. The input clears on
@@ -104,7 +104,8 @@ when you choose. A failed Keychain deletion remains visible and can be retried.
 - The API uses an ephemeral URLSession with disk cache, credential storage, and
   cookie acceptance disabled. Requests use a fixed HTTPS endpoint and reject
   redirects. Avatars load separately over HTTPS without an Authorization header.
-- No UserDefaults/file credential storage, token logs, Authorization logging,
+- UserDefaults stores non-secret connection metadata and migration/deletion bookkeeping only.
+  No token values, private PR content, token logs, Authorization logging,
   analytics, embedded secrets, external dependencies, or ATS exceptions.
 - Only outbound networking is allowed. Keychain access relies on signing and its
   app-specific group; no file or server sandbox entitlements are granted.
@@ -163,30 +164,10 @@ signature rejection that `codesign --verify` alone misses. Ad hoc builds must om
 restricted Keychain access groups, since macOS rejects unprovisioned groups before
 app startup. Neither check proves live Keychain access or the visual UI.
 
-Manual checks, using a development-team-signed build and a disposable token:
-
-- Launch without a Dock icon/main window; open the popover and Settings repeatedly.
-- Click **Connect GitHub** and confirm the form opens inside the popover; **Back**
-  returns to the disconnected state. Verify Settings uses the same connection state.
-- Confirm disconnected status, disabled empty Connect, secure entry, setup link,
-  and version/build; check light/dark appearance and keyboard/VoiceOver access.
-- Connect; confirm progress, disabled duplicate attempts, cleared input, username
-  and avatar in Settings, and matching menu bar state. Refresh enables when connected.
-- Quit/relaunch and verify saved-token restoration without re-entering the token.
-- Relaunch offline; check the retry/disconnect actions and recovery when online.
-- Revoke/expire the token in GitHub, then relaunch; verify its local removal and
-  actionable error. Enter a new token and reconnect.
-- Disconnect; verify the local Keychain item is gone and relaunch stays disconnected.
-- With Keychain unavailable, verify read/save/delete errors and successful retry;
-  failed deletion must not claim a successful disconnect.
-- Close Settings while connecting; ensure completion and reopening remain coherent.
-- Quit cleanly; also run the Release app on an Intel Mac before distribution.
-
-For the dashboard's live comparisons, refresh/cancellation, links, and accessibility
-checks, follow the [Phase 3D acceptance checklist](docs/dashboard.md#remaining-manual-acceptance).
-All 104 mocked tests and the development-signed arm64 Debug build pass; a supplied
-screenshot confirms live authored data and an empty direct-request result, while
-complete repository visibility and nonempty direct requests still need verification.
+For signed migration, two-token setup, refresh/removal/replacement, restart, and
+keyboard/VoiceOver verification, follow the [Phase 3E acceptance checklist](docs/tokens.md#manual-acceptance).
+The automated suite requires no live credentials. Live two-token coverage and visual
+accessibility remain manual acceptance items.
 
 After rebuilding a running app, quit its old instance and relaunch to load the new
 executable. See [architecture](docs/architecture.md) and the

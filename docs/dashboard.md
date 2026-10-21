@@ -1,3 +1,11 @@
+> Current Phase 3E behavior extends the Phase 3D implementation described below:
+> the dashboard owns results per token and section, merging their union by node ID.
+> A failed scope retains stale rows and a named error, while other scopes continue.
+> Adding/replacing/removing invalidates outstanding responses and refreshes the new
+> connection set; removal retains only remaining sources. See [current storage,
+> lifecycle, merge policy and manual acceptance](tokens.md).
+> The validation record below describes Phase 3D, not the current multi-token tests.
+
 # Live pull request dashboard (Phase 3D)
 
 The menu bar shows **Needs your review** (active direct requests) and **My pull
