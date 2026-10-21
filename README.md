@@ -3,11 +3,12 @@
 A lightweight, native macOS menu bar app for GitHub activity. The goal is to show
 pull requests, reviews, comments, and CI updates that need your attention.
 
-**Current status: Phase 2 — GitHub Authentication.** Connect one GitHub.com account
+**Current status: Phase 3A — GitHub GraphQL Foundation.** Connect one GitHub.com account
 with a personal access token, verify its identity, see its username/avatar, and
 disconnect. The app restores and revalidates saved credentials at startup. Settings
 and the menu bar share connection state. Refresh remains disabled; PR fetching,
-review tracking, polling, and notifications are not implemented.
+review tracking, polling, and notifications are not implemented. The data layer now
+has typed GraphQL execution and PR domain values; it makes no PR queries yet.
 
 ## Requirements
 
@@ -120,12 +121,16 @@ xcodebuild -project pingit.xcodeproj -scheme pingit \
   CODE_SIGN_IDENTITY=- CODE_SIGNING_ALLOWED=YES test
 ```
 
-The unhosted Swift Testing target compiles the same authentication sources without
+The unhosted Swift Testing target compiles the same authentication/data sources without
 launching the app. Each URLProtocol stub has an isolated session; Security calls
 use in-memory operations. Tests cover account validation, request headers,
 unauthorized tokens, rate limits, transport failures, bad responses, HTTPS and
 redirect constraints, Keychain attributes/replacement/removal/errors, restoration,
-retry, disconnect failure, duplicate attempts, and cancellation.
+retry, disconnect failure, duplicate attempts, and cancellation. GraphQL coverage
+includes variables, HTTP 200 errors, rejected partial/missing data, HTTP failures,
+rate limits, malformed responses, credential reuse, in-flight cancellation, and
+domain decoding. Phase 3A passed 49 tests and an arm64 Debug build with Xcode 27.1.
+If Xcode stalls scanning the SDK stat cache, add `SDK_STAT_CACHE_ENABLE=NO`.
 
 Build a universal Release app, then check both products:
 

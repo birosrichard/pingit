@@ -55,7 +55,7 @@ final class MockKeychain {
 
 // Each session gets its own stub, so concurrent tests cannot change one another's responses.
 final class MockHTTP: @unchecked Sendable {
-    typealias Handler = @Sendable (URLRequest) throws -> (HTTPURLResponse, Data)
+    typealias Handler = @Sendable (URLRequest) throws -> (HTTPURLResponse, Data)?
     static let accountJSON = #"{"login":"octocat","avatar_url":"https://avatars.githubusercontent.com/u/1"}"#
 
     let session: URLSession
@@ -119,7 +119,7 @@ private final class MockURLProtocol: URLProtocol, @unchecked Sendable {
             return
         }
         do {
-            let (response, data) = try handler(request)
+            guard let (response, data) = try handler(request) else { return }
             client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
             client?.urlProtocol(self, didLoad: data)
             client?.urlProtocolDidFinishLoading(self)

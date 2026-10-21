@@ -1,7 +1,7 @@
 # Development roadmap
 
-Phases 1 and 2 are implemented. Phases 3–8 describe planned scope, not existing
-features. Keep each phase independently buildable and validate before moving on.
+Phases 1, 2, and 3A are implemented. Phase 3B and Phases 4–8 remain planned.
+Keep each phase independently buildable and validate before moving on.
 
 ## 1. Project foundation
 
@@ -26,6 +26,15 @@ features. Keep each phase independently buildable and validate before moving on.
 - No PR fetching, review tracking, OAuth, polling, or notifications in this phase.
 
 ## 3. GitHub data access and pull requests
+
+### 3A. GraphQL foundation — implemented
+
+- Reuse the authenticated URLSession client for typed GraphQL requests/variables.
+- Explicit HTTP, query, partial/missing-data, rate-limit, decoding, and cancellation failures.
+- Independent repository, PR, review/check status, and user/team review-request values.
+- Deterministic mocked tests; no live PR queries, aggregation, or UI changes.
+
+### 3B. Pull request fetching — planned
 
 - Add asynchronous GitHub access for review requests and the user's open PRs.
 - Reuse the authenticated client and existing outbound network entitlement; add
