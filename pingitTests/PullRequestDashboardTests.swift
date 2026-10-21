@@ -245,10 +245,10 @@ struct PullRequestDashboardTests {
         await connection.connect(token: "test-token")
         #expect(connection.dashboard.account == connection.account)
         #expect(connection.dashboard.authored.phase == .idle)
-        #expect(keychain.reads == 0)
+        #expect(keychain.reads == 2)
         connection.dashboard.loadIfNeeded()
         await finish(connection.dashboard)
-        #expect(keychain.reads == 1)
+        #expect(keychain.reads == 3)
         #expect(connection.dashboard.authored.result?.pullRequests.isEmpty == true)
         #expect(connection.dashboard.reviews.phase == .loaded)
         connection.disconnect()
@@ -357,5 +357,255 @@ private actor ControlledDiscovery {
         let matches = pending
         pending.removeAll()
         for request in matches { request.continuation.resume(throwing: error) }
+    }
+}
+
+@MainActor
+struct MultiTokenDashboardTests {
+    private let account = GitHubAccount(id: 1, login: "octocat", avatarURL: URL(string: "https://avatars.githubusercontent.com/u/1")!)
+    private let empty = GitHubPullRequestDiscoveryResult(pullRequests: [], truncationReasons: [], coverageLimitations: [.tokenVisibility])
+
+    @Test func successfulScopesDeduplicateWithinEachSectionAndKeepCoverage() async {
+        let service = ControlledDiscovery()
+        let dashboard = makeDashboard(service)
+        let rows = scopes()
+        dashboard.setConnections(rows, refresh: false)
+        dashboard.loadIfNeeded()
+        dashboard.refresh()
+        await service.waitForCalls(4)
+        let first = result([pr("shared"), pr("personal")], reasons: [.resultLimit])
+        let second = result([pr("shared"), pr("organization")], reasons: [.invalidCursor])
+        await service.resolveAll(result: first, token: rows[0].storageAccount)
+        await service.resolveAll(result: second, token: rows[1].storageAccount)
+        await finish(dashboard)
+        #expect(dashboard.authored.result?.pullRequests.map(\.id) == ["organization", "personal", "shared"])
+        #expect(dashboard.reviews.result?.pullRequests.count == 3)
+        #expect(dashboard.sources[rows[0].id]?.authored.result == first)
+        #expect(dashboard.sources[rows[1].id]?.authored.result == second)
+        #expect(dashboard.authored.result?.truncationReasons == [.resultLimit, .invalidCursor])
+        #expect(await service.callCount == 4)
+    }
+
+    @Test(arguments: [0, 1]) func partialFailureAndRateLimitStayPerToken(failedIndex: Int) async {
+        let rows = scopes()
+        let failedToken = rows[failedIndex].storageAccount
+        let dashboard = PullRequestDashboard(scopedCredential: { $0 }, fetch: { _, token, _ in
+            if token == failedToken { throw GitHubAPIError.rateLimited }
+            return GitHubPullRequestDiscoveryResult(pullRequests: [], truncationReasons: [.pageLimit], coverageLimitations: [.tokenVisibility])
+        })
+        dashboard.setConnections(rows, refresh: true)
+        await finish(dashboard)
+        let successful = rows[1 - failedIndex]
+        #expect(dashboard.sources[rows[failedIndex].id]?.authored.phase == .failed)
+        #expect(dashboard.sources[successful.id]?.authored.phase == .loaded)
+        #expect(dashboard.authored.result?.truncationReasons == [.pageLimit])
+        #expect(dashboard.authored.phase == .failed)
+        #expect(dashboard.authored.errorMessage?.contains(rows[failedIndex].resourceOwner) == true)
+        #expect(dashboard.authored.errorMessage?.contains("rate limit") == true)
+        #expect(dashboard.authored.result != nil)
+    }
+
+    @Test func mergeConflictsRemainUnknownAcrossThreeTokensAndOrderingIsStable() {
+        let approved = result([pr("shared", decision: .approved), pr("other")])
+        let changes = result([pr("shared", decision: .changesRequested)])
+        let merged = GitHubPullRequestDiscoveryResult.merged([approved, changes, approved])
+        #expect(merged.pullRequests.first { $0.id == "shared" }?.reviewStatus == .unknown)
+        #expect(merged.coverageLimitations.contains(.conflictingMetadata))
+        #expect(merged.pullRequests.map(\.id) == ["other", "shared"])
+        #expect(GitHubPullRequestDiscoveryResult.merged([changes, approved]).pullRequests.map(\.id) == ["other", "shared"])
+        let state = PullRequestSectionState(phase: .loaded, result: merged)
+        #expect(state.coverageMessages.contains { $0.contains("disagree") })
+    }
+
+    @Test func mergeUsesNodeIDAndPreservesSafelyAvailableMetadata() {
+        let unknown = pr("same", decision: .unknown)
+        let complete = pr("same", decision: .approved, author: "octocat")
+        let otherNode = pr("different", decision: .approved)
+        // Same title, repository, number and URL are deliberately not deduplication keys.
+        let merged = GitHubPullRequestDiscoveryResult.merged([result([unknown]), result([complete, otherNode])])
+        #expect(merged.pullRequests.count == 2)
+        #expect(merged.pullRequests.first { $0.id == "same" }?.authorLogin == "octocat")
+        #expect(merged.pullRequests.first { $0.id == "same" }?.reviewStatus == .approved)
+        #expect(!merged.coverageLimitations.contains(.conflictingMetadata))
+    }
+
+    @Test func newerUnknownDecisionDoesNotInheritOlderApproval() {
+        let older = pr("same", decision: .approved)
+        let newer = pr("same", decision: .unknown, updated: Date(timeIntervalSince1970: 10))
+        let merged = GitHubPullRequestDiscoveryResult.merged([result([older]), result([newer])])
+        #expect(merged.pullRequests.first?.reviewStatus == .unknown)
+    }
+
+    @Test func refreshAfterAddingTokenBypassesFreshnessAndPreservesLoadedRows() async {
+        let rows = scopes()
+        let service = ControlledDiscovery()
+        let dashboard = makeDashboard(service)
+        dashboard.setConnections([rows[0]], refresh: true)
+        await service.waitForCalls(2)
+        let existing = result([pr("personal")])
+        await service.resolveAll(result: existing)
+        await finish(dashboard)
+        dashboard.setConnections(rows, refresh: true)
+        #expect(dashboard.authored.result == existing)
+        await service.waitForCalls(6)
+        await service.resolveAll(result: existing, token: rows[0].storageAccount)
+        await service.resolveAll(result: result([pr("organization")]), token: rows[1].storageAccount)
+        await finish(dashboard)
+        #expect(dashboard.authored.result?.pullRequests.count == 2)
+    }
+
+    @Test func removalRetainsSharedAndRemainingPRsAndRejectsActiveResponses() async {
+        let rows = scopes()
+        let service = ControlledDiscovery()
+        let dashboard = makeDashboard(service)
+        dashboard.setConnections(rows, refresh: true)
+        await service.waitForCalls(4)
+        let personal = result([pr("personal"), pr("shared")])
+        await service.resolveAll(result: personal, token: rows[0].storageAccount)
+        await service.resolveAll(result: result([pr("organization"), pr("shared")]), token: rows[1].storageAccount)
+        await finish(dashboard)
+        dashboard.refresh()
+        await service.waitForCalls(8)
+        dashboard.setConnections([rows[0]], refresh: true)
+        #expect(dashboard.authored.result == personal)
+        await service.waitForCalls(10)
+        await service.resolveAll(result: result([pr("removed-private")]), token: rows[1].storageAccount)
+        await service.resolveAll(result: personal, token: rows[0].storageAccount)
+        await finish(dashboard)
+        #expect(dashboard.authored.result == personal)
+        #expect(dashboard.sources[rows[1].id] == nil)
+        #expect(await service.cancelledCount >= 2)
+    }
+
+    @Test func replacementInvalidatesOnlyItsCacheAndRejectsOldResponses() async {
+        var rows = scopes()
+        let service = ControlledDiscovery()
+        let dashboard = makeDashboard(service)
+        dashboard.setConnections(rows, refresh: true)
+        await service.waitForCalls(4)
+        await service.resolveAll(result: result([pr("old-private")]), token: rows[0].storageAccount)
+        let organization = result([pr("organization")])
+        await service.resolveAll(result: organization, token: rows[1].storageAccount)
+        await finish(dashboard)
+        dashboard.refresh()
+        await service.waitForCalls(8)
+        let oldReference = rows[0].storageAccount
+        rows[0].credentialID = UUID()
+        dashboard.setConnections(rows, refresh: true)
+        #expect(dashboard.authored.result == organization)
+        await service.waitForCalls(12)
+        await service.resolveAll(result: result([pr("stale-secret")]), token: oldReference)
+        await service.resolveAll(result: result([pr("new-private")]), token: rows[0].storageAccount)
+        await service.resolveAll(result: organization, token: rows[1].storageAccount)
+        await finish(dashboard)
+        #expect(dashboard.authored.result?.pullRequests.map(\.id) == ["new-private", "organization"])
+        dashboard.setConnections([], refresh: true)
+        #expect(dashboard.account == nil && dashboard.sources.isEmpty)
+        #expect(dashboard.authored.result == nil && dashboard.reviews.result == nil)
+    }
+
+    @Test func thirdTokenWaitsForBoundedWorkerSlot() async {
+        let service = ControlledDiscovery()
+        let dashboard = makeDashboard(service)
+        let rows = scopes() + [GitHubTokenConnection(id: UUID(), account: account, resourceOwner: "third")]
+        dashboard.setConnections(rows, refresh: true)
+        await service.waitForCalls(4)
+        #expect(await service.callCount == 4)
+        await service.resolveAll(result: empty, token: rows[0].storageAccount)
+        await service.waitForCalls(6)
+        await service.resolveAll(result: empty)
+        await finish(dashboard)
+        #expect(await service.callCount == 6)
+        #expect(dashboard.authored.phase == .loaded)
+    }
+
+    @Test func missingCredentialFailsOnlyThatScopeAndRetainsItsPreviousResults() async {
+        let rows = scopes()
+        var missing = false
+        let service = ControlledDiscovery()
+        let dashboard = PullRequestDashboard(scopedCredential: { reference in
+            missing && reference == rows[0].storageAccount ? nil : reference
+        }, fetch: { account, token, review in
+            try await service.fetch(account: account, token: token, review: review)
+        })
+        dashboard.setConnections(rows, refresh: true)
+        await service.waitForCalls(4)
+        let previous = result([pr("previous")])
+        await service.resolveAll(result: previous)
+        await finish(dashboard)
+        let timestamp = dashboard.sources[rows[0].id]?.authored.updatedAt
+        missing = true
+        dashboard.refresh()
+        #expect(dashboard.sources[rows[0].id]?.authored.phase == .failed)
+        #expect(dashboard.sources[rows[0].id]?.authored.result == previous)
+        #expect(dashboard.sources[rows[0].id]?.authored.updatedAt == timestamp)
+        await service.waitForCalls(6)
+        await service.resolveAll(result: empty)
+        await finish(dashboard)
+        #expect(dashboard.sources[rows[1].id]?.authored.phase == .loaded)
+        #expect(dashboard.authored.result?.pullRequests.count == 1)
+    }
+
+    private func scopes() -> [GitHubTokenConnection] {
+        [GitHubTokenConnection(id: UUID(), account: account, resourceOwner: "personal"),
+         GitHubTokenConnection(id: UUID(), account: account, resourceOwner: "apify")]
+    }
+
+    private func makeDashboard(_ service: ControlledDiscovery) -> PullRequestDashboard {
+        PullRequestDashboard(scopedCredential: { $0 }, fetch: { account, token, review in
+            try await service.fetch(account: account, token: token, review: review)
+        })
+    }
+
+    private func pr(_ id: String, decision: GitHubReviewStatus = .approved, author: String? = nil,
+                    updated: Date = Date(timeIntervalSince1970: 0)) -> GitHubPullRequest {
+        GitHubPullRequest(id: id, number: 1, title: "Same title", url: URL(string: "https://github.com/a/b/pull/1")!,
+                          repository: GitHubRepository(id: "repo", nameWithOwner: "a/b", url: URL(string: "https://github.com/a/b")!),
+                          authorLogin: author, isDraft: false, createdAt: .distantPast, updatedAt: updated,
+                          reviewStatus: decision, latestReviews: nil, checkStatus: nil, reviewRequests: nil)
+    }
+
+    private func result(_ prs: [GitHubPullRequest], reasons: Set<GitHubPullRequestDiscoveryResult.TruncationReason> = []) -> GitHubPullRequestDiscoveryResult {
+        GitHubPullRequestDiscoveryResult(pullRequests: prs, truncationReasons: reasons, coverageLimitations: [.tokenVisibility])
+    }
+
+    private func finish(_ dashboard: PullRequestDashboard) async {
+        let deadline = ContinuousClock.now + .seconds(5)
+        while dashboard.isLoading, ContinuousClock.now < deadline { await Task.yield() }
+        #expect(!dashboard.isLoading)
+    }
+}
+
+extension MultiTokenDashboardTests {
+    @Test func openingBeforeRestoreFinishesStillLoadsTheRestoredScopes() async {
+        let service = ControlledDiscovery()
+        let dashboard = makeDashboard(service)
+        dashboard.loadIfNeeded()
+        dashboard.setConnections(scopes(), refresh: false)
+        await service.waitForCalls(4)
+        await service.resolveAll(result: empty)
+        await finish(dashboard)
+        #expect(dashboard.authored.phase == .loaded)
+    }
+}
+
+extension MultiTokenDashboardTests {
+    @Test func completeReviewerDetailsReplaceUnavailableDetailsWithoutInventingConflict() throws {
+        let base = pr("same")
+        func withDetails(_ details: GitHubLatestReviews) -> GitHubPullRequest {
+            GitHubPullRequest(id: base.id, number: base.number, title: base.title, url: base.url,
+                              repository: base.repository, authorLogin: base.authorLogin, isDraft: base.isDraft,
+                              createdAt: base.createdAt, updatedAt: base.updatedAt, reviewStatus: base.reviewStatus,
+                              latestReviews: details, checkStatus: nil, reviewRequests: nil)
+        }
+        let complete = GitHubLatestReviews(reviews: [GitHubPullRequestReview(id: "r", authorLogin: "reviewer", state: .approved)], limitations: [])
+        let unavailable = GitHubLatestReviews(reviews: [], limitations: [.unavailable])
+        let merged = GitHubPullRequestDiscoveryResult.merged([result([withDetails(unavailable)]), result([withDetails(complete)])])
+        #expect(merged.pullRequests.first?.latestReviews == complete)
+        #expect(!merged.coverageLimitations.contains(.conflictingMetadata))
+        let contradictory = GitHubLatestReviews(reviews: [GitHubPullRequestReview(id: "r", authorLogin: "reviewer", state: .changesRequested)], limitations: [])
+        let conflicted = GitHubPullRequestDiscoveryResult.merged([result([withDetails(complete)]), result([withDetails(contradictory)]), result([withDetails(complete)])])
+        #expect(conflicted.pullRequests.first?.latestReviews == nil)
+        #expect(conflicted.coverageLimitations.contains(.conflictingMetadata))
     }
 }

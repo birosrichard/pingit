@@ -3,8 +3,13 @@ import Security
 
 @MainActor
 final class MockKeychain {
-    var item: [String: Any]?
+    var items: [String: [String: Any]] = [:]
+    var item: [String: Any]? {
+        get { items["personal-access-token"] ?? items.values.first }
+        set { items["personal-access-token"] = newValue }
+    }
     var readStatus: OSStatus?
+    var readFailureAt: Int?
     var addStatus: OSStatus?
     var updateStatus: OSStatus?
     var deleteStatus: OSStatus?
@@ -24,29 +29,35 @@ final class MockKeychain {
             read: { query in
                 self.reads += 1
                 self.lastQuery = query as! [String: Any]
+                if self.reads == self.readFailureAt { return (errSecInteractionNotAllowed, nil) }
                 if let status = self.readStatus { return (status, nil) }
-                guard let item = self.item else { return (errSecItemNotFound, nil) }
+                guard let item = self.items[self.lastQuery[kSecAttrAccount as String] as! String] else { return (errSecItemNotFound, nil) }
                 return (errSecSuccess, item[kSecValueData as String] as CFTypeRef?)
             },
             add: { query in
                 self.adds += 1
                 if let status = self.addStatus { return status }
-                guard self.item == nil else { return errSecDuplicateItem }
-                self.item = query as? [String: Any]
+                let attributes = query as! [String: Any]
+                let account = attributes[kSecAttrAccount as String] as! String
+                guard self.items[account] == nil else { return errSecDuplicateItem }
+                self.items[account] = attributes
                 return errSecSuccess
             },
-            update: { _, attributes in
+            update: { query, attributes in
                 self.updates += 1
                 if let status = self.updateStatus { return status }
-                self.item?.merge(attributes as! [String: Any]) { _, new in new }
+                let query = query as! [String: Any]
+                let account = query[kSecAttrAccount as String] as! String
+                self.items[account]?.merge(attributes as! [String: Any]) { _, new in new }
                 return errSecSuccess
             },
             delete: { query in
                 self.deletes += 1
                 self.lastQuery = query as! [String: Any]
                 if let status = self.deleteStatus { return status }
-                guard self.item != nil else { return errSecItemNotFound }
-                self.item = nil
+                let account = self.lastQuery[kSecAttrAccount as String] as! String
+                guard self.items[account] != nil else { return errSecItemNotFound }
+                self.items[account] = nil
                 return errSecSuccess
             }
         ))
@@ -77,7 +88,8 @@ final class MockHTTP: @unchecked Sendable {
     }
 
     deinit {
-        session.invalidateAndCancel()
+        // Clients may still retain this session for cancelled dashboard tasks.
+        // Removing the handler fails late requests safely without invalidating a live client.
         MockURLProtocol.handlers.remove(id)
     }
 
