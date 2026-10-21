@@ -136,7 +136,6 @@ struct MenuBarView: View {
     }
 }
 
-
 private struct PullRequestSection: View {
     let title: String
     let state: PullRequestSectionState
@@ -185,7 +184,7 @@ private struct PullRequestSection: View {
                     }
                 }
                 if let date = state.updatedAt {
-                    Text("\(state.phase == .failed ? "Showing saved results from" : "Updated") \(date.formatted(date: .abbreviated, time: .standard))")
+                    Text("\(state.phase == .failed ? "Showing previous results from" : "Updated") \(date.formatted(date: .abbreviated, time: .standard))")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -247,7 +246,7 @@ private struct PullRequestRow: View {
                 .lineLimit(2)
                 .truncationMode(.tail)
                 .multilineTextAlignment(.leading)
-            Text("\(pr.repository.nameWithOwner) #\(pr.number)")
+            Text("\(pr.repository.nameWithOwner) #\(String(pr.number))")
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .lineLimit(1)

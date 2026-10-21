@@ -12,7 +12,12 @@ struct PullRequestSectionState: Equatable {
         guard let result else { return [] }
         var messages: [String] = []
         if result.isTruncated {
-            messages.append("Results are incomplete: a search, page, or reviewer limit was reached.")
+            if result.truncationReasons.contains(.invalidCursor) {
+                messages.append("Results are incomplete: GitHub returned an unusable pagination cursor.")
+            }
+            if !result.truncationReasons.subtracting([.invalidCursor]).isEmpty {
+                messages.append("Results are incomplete: a search, page, or review request limit was reached.")
+            }
         }
         if result.coverageLimitations.contains(.tokenVisibility) {
             messages.append("Only repositories visible to your token are included. Some repositories may be inaccessible.")
@@ -76,6 +81,8 @@ final class PullRequestDashboard {
 
     func refresh() {
         guard let account, !isLoading else { return }
+        // A new refresh also invalidates cleanup from a just-completed task.
+        session = UUID()
         lastAttempt = now()
         authored.phase = .loading
         authored.errorMessage = nil
