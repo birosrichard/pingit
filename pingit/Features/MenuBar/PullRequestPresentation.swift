@@ -74,8 +74,9 @@ enum DashboardLayout {
         min(460, max(1, availableScreenWidth - 32))
     }
 
-    static func listHeight(rowCount: Int, availableScreenHeight: CGFloat) -> CGFloat {
-        min(420, max(1, availableScreenHeight - 260), max(144, CGFloat(max(0, rowCount)) * 108))
+    static func listHeight(rowCount: Int, availableScreenHeight: CGFloat, contentHeight: CGFloat? = nil) -> CGFloat {
+        let initialHeight = max(144, CGFloat(max(0, rowCount)) * 108)
+        return min(420, max(1, availableScreenHeight - 260), max(1, contentHeight ?? initialHeight))
     }
 }
 

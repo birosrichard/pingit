@@ -44,6 +44,7 @@ struct GitHubOwnerAvatar: View {
                 Image(systemName: fallbackSystemImage)
                     .resizable()
                     .scaledToFit()
+                    .padding(4)
                     .foregroundStyle(.secondary)
             }
         }

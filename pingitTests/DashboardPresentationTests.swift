@@ -90,5 +90,8 @@ struct DashboardPresentationTests {
         #expect(DashboardLayout.listHeight(rowCount: 200, availableScreenHeight: 900) == 420)
         #expect(DashboardLayout.listHeight(rowCount: 200, availableScreenHeight: 500) == 240)
         #expect(DashboardLayout.listHeight(rowCount: 1, availableScreenHeight: 900) == 144)
+        #expect(DashboardLayout.listHeight(rowCount: 2, availableScreenHeight: 900, contentHeight: 184) == 184)
+        #expect(DashboardLayout.listHeight(rowCount: 200, availableScreenHeight: 900, contentHeight: 18000) == 420)
+        #expect(DashboardLayout.listHeight(rowCount: 2, availableScreenHeight: 500, contentHeight: 300) == 240)
     }
 }

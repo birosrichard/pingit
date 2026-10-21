@@ -7,6 +7,7 @@ struct MenuBarView: View {
     @State private var isShowingConnection = false
     @State private var selection = PullRequestInbox.review
     @State private var isShowingDetails = false
+    @State private var listContentHeight: CGFloat?
     @FocusState private var focusedTab: PullRequestInbox?
 
     init(selection: PullRequestInbox = .review) {
@@ -64,6 +65,7 @@ struct MenuBarView: View {
                maxWidth: DashboardLayout.width(availableScreenWidth: screenFrame.width))
         .background(Color(nsColor: .windowBackgroundColor))
         .onAppear { dashboard.loadIfNeeded() }
+        .onChange(of: selection) { _, _ in listContentHeight = nil }
         .onChange(of: connection.account) { _, account in
             selection = .review
             if account != nil {
@@ -92,7 +94,7 @@ struct MenuBarView: View {
                 }
             }
             Spacer(minLength: 8)
-            if dashboard.isLoading {
+            if dashboard.isLoading && (dashboard.authored.result != nil || dashboard.reviews.result != nil) {
                 ProgressView().controlSize(.small)
                     .accessibilityLabel("Refreshing pull requests")
             }
@@ -151,9 +153,18 @@ struct MenuBarView: View {
                     }
                     .padding(4)
                     .padding(.trailing, 8) // Leave room for macOS overlay scroll indicators.
+                    .background {
+                        GeometryReader { geometry in
+                            Color.clear.preference(key: PullRequestListHeightKey.self, value: geometry.size.height)
+                        }
+                    }
+                }
+                .onPreferenceChange(PullRequestListHeightKey.self) { height in
+                    if height > 0 { listContentHeight = height }
                 }
                 .id(selection)
-                .frame(height: DashboardLayout.listHeight(rowCount: pullRequests.count, availableScreenHeight: screenFrame.height))
+                .frame(height: DashboardLayout.listHeight(rowCount: pullRequests.count, availableScreenHeight: screenFrame.height,
+                                                        contentHeight: listContentHeight))
                 .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 12))
                 .overlay {
                     RoundedRectangle(cornerRadius: 12).strokeBorder(.quaternary.opacity(0.6))
@@ -310,5 +321,12 @@ struct MenuBarView: View {
             .padding(16)
         }
         .frame(width: 340, height: 280)
+    }
+}
+
+private enum PullRequestListHeightKey: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = max(value, nextValue())
     }
 }

@@ -36,7 +36,7 @@ struct PullRequestRow: View {
                     TimelineView(.periodic(from: .now, by: 60)) { context in
                         Text(presentation.compactUpdatedAge(relativeTo: context.date))
                     }
-                    .font(.caption).monospacedDigit().foregroundStyle(.tertiary)
+                    .font(.caption).monospacedDigit().foregroundStyle(.secondary)
                     .frame(minWidth: 28, alignment: .trailing)
                     .fixedSize()
                     .accessibilityHidden(true)
