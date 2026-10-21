@@ -3,7 +3,7 @@
 A lightweight, native macOS menu bar app for GitHub activity. The goal is to show
 pull requests, reviews, comments, and CI updates that need your attention.
 
-**Current status: Phase 5A — Reliable Background Sync.**
+**Current status: Phase 5B — Reliable Pull Request Change Detection.**
 Connect one GitHub.com identity with multiple tokens stored independently in macOS
 Keychain. Review / My PRs / Drafts show clearer native PR rows, repository/owner
 identity, independent review context and compact file/addition/deletion totals.
@@ -21,7 +21,10 @@ Background sync runs while the app is open, even with the popover closed, every
 5 minutes by default. **Settings → Background Sync** can disable it or select
 2, 5, 10, 15 or 30 minutes. Manual refresh remains available. Token-specific retry
 restrictions protect rate limits and preserve stale results on failure. No
-notifications are generated, and no private PR history is persisted. See [background sync and validation](docs/phase-5a.md),
+notifications are generated. A minimal local baseline detects direct review-request,
+review and draft-ready changes across refreshes and restarts; titles, repository
+names and event history are never persisted. See [change detection and validation](docs/phase-5b.md),
+[background sync and validation](docs/phase-5a.md),
 [Phase 4C polish and validation](docs/phase-4c.md),
 [Phase 4B design and validation](docs/phase-4b.md),
 [review semantics](docs/reviews.md), [retained CI implementation](docs/checks.md), and
@@ -30,7 +33,7 @@ notifications are generated, and no private PR history is persisted. See [backgr
 ## Requirements
 
 - macOS 14 or later; Apple Silicon and Intel
-- Xcode 16 or later with Swift 6; Phase 5A validated with Xcode 27.1 / Swift 6.4
+- Xcode 16 or later with Swift 6; Phase 5B validated with Xcode 27.1 / Swift 6.4
 - A valid Apple Development signing identity and provisioning profile for real
   Keychain access (choose your development team in Xcode; no team is committed)
 

@@ -148,14 +148,33 @@ eligible token, with no catch-up bursts. Manual and popover loads reset those sa
 deadlines. Sleep cancels active discovery and the deadline; wake reevaluates staleness
 and restrictions. Native Settings persist only enabled/interval preferences. If the
 popover opens during restore, discovery starts when connections arrive. A full
-disconnect clears results and starts the next session idle. No private PR data is
-persisted. See [merge/lifecycle policy](tokens.md) and [dashboard](dashboard.md).
+disconnect clears results and starts the next session idle. Phase 5B persists only
+minimal identifier/state baselines, as described below. See [merge/lifecycle policy](tokens.md) and [dashboard](dashboard.md).
+
+## Pull request change detection
+
+The shared refresh flight sends only freshly successful per-source section results
+into `PullRequestChangeDetector`, an actor serializing comparisons and snapshot
+commits outside the main actor. Connection generations, refresh sequence ordering,
+and the existing cancellation/session guards reject obsolete work. Failed/truncated
+sections preserve their baseline; repository-access witnesses and stable source
+coverage protect request removals and token reconciliation.
+
+A bounded versioned JSON snapshot in Application Support persists identifiers,
+state and comparability flags, omitting titles, repository names, URLs, credentials
+and event history. Private atomic writes commit before `dashboard.onChanges`, the
+single replaceable callback for future notification code. No consumer means events
+are discarded, with no replay buffer. First sync and corrupt/incompatible storage
+quietly baseline; restart resumes committed comparisons. Delivery is at most once;
+a crash/cancellation between commit and callback can lose an event. See
+[Phase 5B semantics, privacy, validation and limits](phase-5b.md).
 
 ## Future boundaries
 
-Phases through 4C and [5A background sync](phase-5a.md) are implemented. Successful
+Phases through 4C, [5A background sync](phase-5a.md), and
+[5B change detection](phase-5b.md) are implemented. Successful
 account validation must never imply complete repository access. Synchronization
-stops on disconnect/quit and can be disabled. Change detection, notifications,
+stops on disconnect/quit and can be disabled. Notifications,
 repository selection, multiple accounts, OAuth and packaging require separate scope.
 
 Work stays on `main` in small local commits. Distribution, notarization, store

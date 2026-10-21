@@ -1,9 +1,9 @@
 # Development roadmap
 
 Phases 1–3F, 4A (CI/diff metadata), 4B (native dashboard refinement),
-[4C (final dashboard polish)](phase-4c.md), and [5A (background sync)](phase-5a.md)
-are implemented. Further activity, change detection, notifications and distribution
-remain separately scoped.
+[4C (final dashboard polish)](phase-4c.md), [5A (background sync)](phase-5a.md),
+and [5B (change detection)](phase-5b.md) are implemented. Further activity,
+notifications and distribution remain separately scoped.
 Keep each phase independently buildable and validate before moving on.
 
 ## 1. Project foundation
@@ -128,9 +128,19 @@ Keep each phase independently buildable and validate before moving on.
 - See [implementation, validation and limitations](phase-5a.md). No change detection,
   notifications or PR history are included.
 
-## 6. Change detection and native notifications — future scope
+## 5B. Reliable pull request change detection — implemented
 
-- Compare refreshed data for meaningful changes and add opt-in macOS notifications.
+- Minimal versioned private snapshots survive restart with quiet initial baselines.
+- Direct request membership, review decisions, comparable individual reviews and draft readiness.
+- Per-source coverage/access witnesses, token reconciliation, cancellation and deduplication.
+- Atomic commit before a single internal callback, without event history or UI changes.
+- 248 tests, signed arm64 Debug and strict Swift 6 validation pass.
+- See [semantics, consistency guarantees and known limits](phase-5b.md).
+- Live read-only event acceptance and notification delivery remain separate work.
+
+## 6. Native notifications — future scope
+
+- Consume Phase 5B events and add opt-in macOS notifications.
 - Acceptance: only meaningful new events notify; repeated polls do not duplicate
   alerts; sleep/wake, offline recovery, permission denial, and quit behave cleanly.
 
