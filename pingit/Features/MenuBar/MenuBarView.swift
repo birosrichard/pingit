@@ -4,6 +4,7 @@ import SwiftUI
 struct MenuBarView: View {
     @Environment(GitHubConnection.self) private var connection
     @Environment(\.openSettings) private var openSettings
+    @State private var isShowingConnection = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -27,35 +28,61 @@ struct MenuBarView: View {
 
             Divider()
 
-            VStack(spacing: 12) {
-                if let account = connection.account {
-                    GitHubAccountView(account: account)
-                    Text("Pull requests and reviews will arrive in a future update.")
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                } else if connection.isConnecting {
-                    ProgressView()
-                    Text("Connecting to GitHub…")
-                        .font(.headline)
-                } else {
-                    Image(systemName: "link")
-                        .font(.system(size: 30, weight: .light))
-                        .foregroundStyle(.secondary)
-                        .accessibilityHidden(true)
+            if isShowingConnection && connection.account == nil {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 16) {
+                        HStack {
+                            Text("Connect GitHub")
+                                .font(.headline)
+                            Spacer()
+                            Button("Back", systemImage: "chevron.left") {
+                                isShowingConnection = false
+                            }
+                            .buttonStyle(.borderless)
+                        }
 
-                    Text(connection.hasSavedCredential ? "GitHub needs attention" : "GitHub isn’t connected")
-                        .font(.headline)
-
-                    Text(connection.errorMessage ?? "Open Settings to connect your GitHub account.")
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
+                        GitHubConnectionControls()
+                    }
+                    .padding(20)
                 }
+                .frame(height: 440)
+            } else {
+                VStack(spacing: 12) {
+                    if let account = connection.account {
+                        GitHubAccountView(account: account)
+                        Text("Pull requests and reviews will arrive in a future update.")
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+                    } else if connection.isConnecting {
+                        ProgressView()
+                        Text("Connecting to GitHub…")
+                            .font(.headline)
+                    } else {
+                        Image(systemName: "link")
+                            .font(.system(size: 30, weight: .light))
+                            .foregroundStyle(.secondary)
+                            .accessibilityHidden(true)
+
+                        Text(connection.hasSavedCredential ? "GitHub needs attention" : "GitHub isn’t connected")
+                            .font(.headline)
+
+                        Text(connection.errorMessage ?? "Connect your GitHub account to get started.")
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+
+                        Button("Connect GitHub") {
+                            isShowingConnection = true
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .controlSize(.large)
+                    }
+                }
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity)
+                .padding(.horizontal, 24)
+                .padding(.vertical, 28)
             }
-            .multilineTextAlignment(.center)
-            .fixedSize(horizontal: false, vertical: true)
-            .frame(maxWidth: .infinity)
-            .padding(.horizontal, 24)
-            .padding(.vertical, 28)
 
             Divider()
 
@@ -79,5 +106,8 @@ struct MenuBarView: View {
             .padding(12)
         }
         .frame(width: 320)
+        .onChange(of: connection.account) { _, account in
+            if account != nil { isShowingConnection = false }
+        }
     }
 }

@@ -1,9 +1,6 @@
 import SwiftUI
 
 struct SettingsView: View {
-    @Environment(GitHubConnection.self) private var connection
-    @State private var token = ""
-
     private var version: String {
         Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "Unknown"
     }
@@ -15,58 +12,7 @@ struct SettingsView: View {
     var body: some View {
         Form {
             Section("GitHub connection") {
-                if let account = connection.account {
-                    GitHubAccountView(account: account)
-                } else {
-                    LabeledContent("Status", value: connection.isConnecting ? "Connecting…" : "Not connected")
-
-                    SecureField("Personal access token", text: $token)
-                        .textContentType(.password)
-                        .disabled(connection.isConnecting)
-                        .onSubmit { connect() }
-
-                    HStack {
-                        Button("Connect") { connect() }
-                            .disabled(connection.isConnecting || token.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-
-                        if connection.isConnecting {
-                            ProgressView()
-                                .controlSize(.small)
-                                .accessibilityLabel("Connecting to GitHub")
-                        }
-
-                        if connection.hasSavedCredential {
-                            Button("Retry saved connection") {
-                                Task { await connection.reconnectSavedAccount() }
-                            }
-                            .disabled(connection.isConnecting)
-                        }
-                    }
-
-                    Text("Create a fine-grained token in GitHub Settings → Developer settings → Personal access tokens. Choose your account, set an expiration, use Public repositories, and leave additional permissions unset. No write permissions are needed.")
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-
-                    Link("How to create a fine-grained token", destination: URL(string: "https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens#creating-a-fine-grained-personal-access-token")!)
-                }
-
-                if let error = connection.errorMessage {
-                    Label(error, systemImage: "exclamationmark.triangle")
-                        .foregroundStyle(.red)
-                        .accessibilityLabel("Connection error: \(error)")
-                }
-
-                if connection.account != nil || connection.hasSavedCredential {
-                    Button("Disconnect", role: .destructive) {
-                        token = ""
-                        connection.disconnect()
-                    }
-                    .disabled(connection.isConnecting)
-                }
-
-                Text("Your token is stored in macOS Keychain and is never shown after connecting. Account validation does not verify access to private repositories or organizations. Future PR and review features may need repository permissions and organization approval.")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
+                GitHubConnectionControls()
             }
 
             Section("About pingit") {
@@ -76,6 +22,71 @@ struct SettingsView: View {
         }
         .formStyle(.grouped)
         .frame(width: 520, height: 560)
+    }
+}
+
+struct GitHubConnectionControls: View {
+    @Environment(GitHubConnection.self) private var connection
+    @State private var token = ""
+    @FocusState private var isTokenFocused: Bool
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            if let account = connection.account {
+                GitHubAccountView(account: account)
+            } else {
+                LabeledContent("Status", value: connection.isConnecting ? "Connecting…" : "Not connected")
+
+                SecureField("Personal access token", text: $token)
+                    .textContentType(.password)
+                    .focused($isTokenFocused)
+                    .disabled(connection.isConnecting)
+                    .onSubmit { connect() }
+
+                HStack {
+                    Button("Connect") { connect() }
+                        .disabled(connection.isConnecting || token.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+
+                    if connection.isConnecting {
+                        ProgressView()
+                            .controlSize(.small)
+                            .accessibilityLabel("Connecting to GitHub")
+                    }
+                }
+
+                if connection.hasSavedCredential {
+                    Button("Retry saved connection") {
+                        Task { await connection.reconnectSavedAccount() }
+                    }
+                    .disabled(connection.isConnecting)
+                }
+
+                Text("Create a fine-grained token in GitHub Settings → Developer settings → Personal access tokens. Choose your account, set an expiration, use Public repositories, and leave additional permissions unset. No write permissions are needed.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+
+                Link("How to create a fine-grained token", destination: URL(string: "https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens#creating-a-fine-grained-personal-access-token")!)
+            }
+
+            if let error = connection.errorMessage {
+                Label(error, systemImage: "exclamationmark.triangle")
+                    .foregroundStyle(.red)
+                    .accessibilityLabel("Connection error: \(error)")
+            }
+
+            if connection.account != nil || connection.hasSavedCredential {
+                Button("Disconnect", role: .destructive) {
+                    token = ""
+                    connection.disconnect()
+                }
+                .disabled(connection.isConnecting)
+            }
+
+            Text("Your token is stored in macOS Keychain and is never shown after connecting. Account validation does not verify access to private repositories or organizations. Future PR and review features may need repository permissions and organization approval.")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+        }
+        .onAppear { isTokenFocused = connection.account == nil }
         .onDisappear { token = "" }
         .onChange(of: connection.account) { _, account in
             if account != nil { token = "" }

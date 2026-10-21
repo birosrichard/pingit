@@ -51,7 +51,8 @@ hardened runtime for ad hoc signing. Distribution/notarization is future work.
 
 ## Connect GitHub
 
-1. Open **Settings…** from the menu bar popover.
+1. Click **Connect GitHub** in the menu bar popover to enter your token directly.
+   The same connection controls are also available in **Settings…**.
 2. Follow [GitHub's fine-grained token instructions](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens#creating-a-fine-grained-personal-access-token):
    GitHub Settings → Developer settings → Personal access tokens → Fine-grained
    tokens → Generate new token.
@@ -144,6 +145,8 @@ app startup. Neither check proves live Keychain access or the visual UI.
 Manual checks, using a development-team-signed build and a disposable token:
 
 - Launch without a Dock icon/main window; open the popover and Settings repeatedly.
+- Click **Connect GitHub** and confirm the form opens inside the popover; **Back**
+  returns to the disconnected state. Verify Settings uses the same connection state.
 - Confirm disconnected status, disabled empty Connect, secure entry, setup link,
   and version/build; check light/dark appearance and keyboard/VoiceOver access.
 - Connect; confirm progress, disabled duplicate attempts, cleared input, username

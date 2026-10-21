@@ -28,8 +28,10 @@ removal errors reported. Disconnect only clears account state after deletion suc
 Duplicate attempts/disconnect are blocked during validation; cancellation cannot
 commit a validated account/token. There is no background retry or polling.
 
-Settings holds only an unsaved token draft. Submission clears it before the
-asynchronous attempt; successful connection and view disappearance clear it too.
+The shared `GitHubConnectionControls` view holds only an unsaved token draft.
+Settings embeds it in its connection section; the menu bar’s **Connect GitHub**
+CTA opens the same controls in a scrollable panel with a Back action. Submission
+clears the draft before the asynchronous attempt; successful connection and view disappearance clear it too.
 The connected view never reads a token. The menu bar shows connection status,
 Settings, disabled Refresh, and Quit. Opening Settings activates the agent app
 through AppKit. These UI actions remain on the main actor.
