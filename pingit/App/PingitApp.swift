@@ -1,4 +1,5 @@
 import SwiftUI
+import UserNotifications
 
 @main
 struct PingitApp: App {
@@ -28,9 +29,15 @@ final class PingitAppDelegate: NSObject, NSApplicationDelegate {
     let connection = GitHubConnection()
     let notifications = NotificationCoordinator(service: NativeNotificationService(),
         preferences: NotificationPreferences(defaults: .standard))
+    private var notificationDelegate: NativeNotificationDelegate?
     private var restoration: Task<Void, Never>?
 
     func applicationWillFinishLaunching(_ notification: Notification) {
+        let delegate = NativeNotificationDelegate { string in
+            NotificationActivation().activate(string)
+        }
+        notificationDelegate = delegate
+        UNUserNotificationCenter.current().delegate = delegate
         notifications.start(dashboard: connection.dashboard)
     }
 
@@ -55,6 +62,8 @@ final class PingitAppDelegate: NSObject, NSApplicationDelegate {
     func applicationWillTerminate(_ notification: Notification) {
         restoration?.cancel()
         restoration = nil
+        UNUserNotificationCenter.current().delegate = nil
+        notificationDelegate = nil
         notifications.stop()
         connection.dashboard.shutdown()
         NSWorkspace.shared.notificationCenter.removeObserver(self)

@@ -227,6 +227,10 @@ struct NotificationSettingsSection: View {
                 Toggle("Play a sound", isOn: $preferences.sound)
             }
             .disabled(!preferences.enabled)
+            #if DEBUG
+            Button("Send test notification") { notifications.sendDebugNotification() }
+                .disabled(!preferences.enabled || !notifications.permission.allowsDelivery || notifications.isDelivering)
+            #endif
             if let error = notifications.errorMessage {
                 Text(error).font(.caption).foregroundStyle(.red)
             }

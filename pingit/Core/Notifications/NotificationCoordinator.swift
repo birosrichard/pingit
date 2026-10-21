@@ -96,6 +96,17 @@ final class NotificationCoordinator {
         }
     }
 
+    #if DEBUG
+    func sendDebugNotification() {
+        guard !stopped, preferences.enabled, permission.allowsDelivery, pending.count < Self.pendingLimit else { return }
+        pending.append(NotificationMessage(identifier: "pingit.debug.\(UUID().uuidString)",
+            threadIdentifier: "pingit.debug", title: "pingit test notification",
+            subtitle: "octocat/Hello-World #1", body: "Synthetic sample — click to open the public example PR.",
+            pullRequestURL: "https://github.com/octocat/Hello-World/pull/1", sound: preferences.sound))
+        beginDeliveryIfNeeded()
+    }
+    #endif
+
     func cancelPending() {
         deliveryGeneration += 1
         delivery?.cancel()
