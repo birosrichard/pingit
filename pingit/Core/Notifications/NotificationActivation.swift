@@ -9,6 +9,13 @@ struct NotificationActivation {
         self.openURL = openURL
     }
 
+    nonisolated static func responseURL(identifier: String, isDefaultAction: Bool, urlString: String?) -> String? {
+        guard isDefaultAction,
+              identifier.hasPrefix("pingit.change.") || identifier.hasPrefix("pingit.debug."),
+              let urlString, GitHubNotificationURL.validate(urlString) != nil else { return nil }
+        return urlString
+    }
+
     @discardableResult
     func activate(_ string: String) -> Bool {
         guard let url = GitHubNotificationURL.validate(string) else { return false }
@@ -28,10 +35,11 @@ final class NativeNotificationDelegate: NSObject, UNUserNotificationCenterDelega
 
     func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse,
                                 withCompletionHandler completionHandler: @escaping @Sendable () -> Void) {
-        let identifier = response.notification.request.identifier
-        guard response.actionIdentifier == UNNotificationDefaultActionIdentifier,
-              identifier.hasPrefix("pingit.change.") || identifier.hasPrefix("pingit.debug."),
-              let string = response.notification.request.content.userInfo["pullRequestURL"] as? String else {
+        guard let string = NotificationActivation.responseURL(
+            identifier: response.notification.request.identifier,
+            isDefaultAction: response.actionIdentifier == UNNotificationDefaultActionIdentifier,
+            urlString: response.notification.request.content.userInfo["pullRequestURL"] as? String
+        ) else {
             completionHandler()
             return
         }

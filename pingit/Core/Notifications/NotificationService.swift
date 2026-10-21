@@ -43,7 +43,12 @@ final class NativeNotificationService: NotificationService {
     }
 
     func requestAuthorization() async throws {
-        _ = try await center.requestAuthorization(options: [.alert, .sound])
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, any Error>) in
+            center.requestAuthorization(options: [.alert, .sound]) { _, error in
+                if let error { continuation.resume(throwing: error) }
+                else { continuation.resume() }
+            }
+        }
     }
 
     func deliver(_ message: NotificationMessage) async throws {

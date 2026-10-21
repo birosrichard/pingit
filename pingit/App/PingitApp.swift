@@ -30,6 +30,7 @@ final class PingitAppDelegate: NSObject, NSApplicationDelegate {
     let notifications = NotificationCoordinator(service: NativeNotificationService(),
         preferences: NotificationPreferences(defaults: .standard))
     private var notificationDelegate: NativeNotificationDelegate?
+    private var permissionRefresh: Task<Void, Never>?
     private var restoration: Task<Void, Never>?
 
     func applicationWillFinishLaunching(_ notification: Notification) {
@@ -42,7 +43,12 @@ final class PingitAppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationDidBecomeActive(_ notification: Notification) {
-        Task { [notifications] in await notifications.refreshAuthorization() }
+        refreshNotificationAuthorization()
+    }
+
+    private func refreshNotificationAuthorization() {
+        permissionRefresh?.cancel()
+        permissionRefresh = Task { [notifications] in await notifications.refreshAuthorization() }
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -50,10 +56,8 @@ final class PingitAppDelegate: NSObject, NSApplicationDelegate {
         workspace.addObserver(self, selector: #selector(willSleep), name: NSWorkspace.willSleepNotification, object: nil)
         workspace.addObserver(self, selector: #selector(didWake), name: NSWorkspace.didWakeNotification, object: nil)
         connection.dashboard.startBackgroundSync()
-        restoration = Task { [connection, notifications] in
-            await notifications.refreshAuthorization()
-            await connection.restore()
-        }
+        refreshNotificationAuthorization()
+        restoration = Task { [connection] in await connection.restore() }
     }
 
     @objc private func willSleep(_ notification: Notification) { connection.dashboard.systemWillSleep() }
@@ -62,6 +66,8 @@ final class PingitAppDelegate: NSObject, NSApplicationDelegate {
     func applicationWillTerminate(_ notification: Notification) {
         restoration?.cancel()
         restoration = nil
+        permissionRefresh?.cancel()
+        permissionRefresh = nil
         UNUserNotificationCenter.current().delegate = nil
         notificationDelegate = nil
         notifications.stop()
