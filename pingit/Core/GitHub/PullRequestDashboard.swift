@@ -19,8 +19,11 @@ struct PullRequestSectionState: Equatable {
                 messages.append("Results are incomplete: a search, page, or review request limit was reached.")
             }
         }
+        if result.coverageLimitations.contains(.conflictingMetadata) {
+            messages.append("Some token results disagree. Conflicting review information is shown as unknown.")
+        }
         if result.coverageLimitations.contains(.tokenVisibility) {
-            messages.append("Only repositories visible to your token are included. Some repositories may be inaccessible.")
+            messages.append("Only repositories visible to your tokens are included. Some repositories may be inaccessible.")
         }
         if result.coverageLimitations.contains(.directReviewRequestsOnly) {
             messages.append("Direct requests only. Team review requests aren’t included.")
@@ -33,22 +36,28 @@ struct PullRequestSectionState: Equatable {
 @Observable
 final class PullRequestDashboard {
     typealias Fetch = @Sendable (GitHubAccount, String, Bool) async throws -> GitHubPullRequestDiscoveryResult
-
+    struct SourceState: Equatable {
+        let connection: GitHubTokenConnection
+        var authored = PullRequestSectionState()
+        var reviews = PullRequestSectionState()
+    }
     private(set) var authored = PullRequestSectionState()
     private(set) var reviews = PullRequestSectionState()
     private(set) var account: GitHubAccount?
+    private(set) var sources: [UUID: SourceState] = [:]
     var isLoading: Bool { authored.phase == .loading || reviews.phase == .loading }
 
-    @ObservationIgnored private let credential: () throws -> String?
+    @ObservationIgnored private let credential: (String) throws -> String?
     @ObservationIgnored private let fetch: Fetch
     @ObservationIgnored private let now: () -> Date
+    @ObservationIgnored private var connections: [GitHubTokenConnection] = []
     @ObservationIgnored private var task: Task<Void, Never>?
     @ObservationIgnored private var session = UUID()
     @ObservationIgnored private var lastAttempt: Date?
 
     init(credentials: KeychainCredentialStore = KeychainCredentialStore(),
          discovery: GitHubPullRequestDiscovery = GitHubPullRequestDiscovery()) {
-        credential = { try credentials.load() }
+        credential = { try credentials.load(account: $0) }
         fetch = { account, token, reviews in
             if reviews { return try await discovery.reviewRequestedPullRequests(for: account, token: token) }
             return try await discovery.authoredPullRequests(for: account, token: token)
@@ -56,22 +65,48 @@ final class PullRequestDashboard {
         now = Date.init
     }
 
-    // Narrow deterministic seams; production uses the existing Keychain and discovery services.
     init(credential: @escaping () throws -> String?, now: @escaping () -> Date = Date.init,
          fetch: @escaping Fetch) {
-        self.credential = credential
+        self.credential = { _ in try credential() }
+        self.now = now
+        self.fetch = fetch
+    }
+
+    init(scopedCredential: @escaping (String) throws -> String?, now: @escaping () -> Date = Date.init,
+         fetch: @escaping Fetch) {
+        credential = scopedCredential
         self.now = now
         self.fetch = fetch
     }
 
     func setAccount(_ account: GitHubAccount?) {
+        // Legacy deterministic seam: a fresh session even for the same identity.
+        setConnections(account.map {
+            [GitHubTokenConnection(id: UUID(), account: $0, resourceOwner: $0.login)]
+        } ?? [], refresh: false)
+    }
+
+    func setConnections(_ rows: [GitHubTokenConnection], refresh shouldRefresh: Bool) {
         task?.cancel()
         task = nil
         session = UUID()
-        self.account = account
-        authored = PullRequestSectionState()
-        reviews = PullRequestSectionState()
+        connections = rows
+        account = rows.compactMap(\.account).first
+        sources = Dictionary(uniqueKeysWithValues: rows.map { row in
+            let previous = sources[row.id]
+            // Replacement changes the storage reference and must discard its private data.
+            let state = previous?.connection.storageAccount == row.storageAccount ? previous : nil
+            var next = SourceState(connection: row, authored: state?.authored ?? .init(), reviews: state?.reviews ?? .init())
+            for review in [false, true] {
+                var section = review ? next.reviews : next.authored
+                if section.phase == .loading { section.phase = section.result == nil ? .idle : .loaded }
+                if review { next.reviews = section } else { next.authored = section }
+            }
+            return (row.id, next)
+        })
         lastAttempt = nil
+        rebuild()
+        if shouldRefresh { refresh() }
     }
 
     func loadIfNeeded() {
@@ -80,59 +115,102 @@ final class PullRequestDashboard {
     }
 
     func refresh() {
-        guard let account, !isLoading else { return }
-        // A new refresh also invalidates cleanup from a just-completed task.
+        guard !connections.isEmpty, !isLoading else { return }
         session = UUID()
         lastAttempt = now()
-        authored.phase = .loading
-        authored.errorMessage = nil
-        reviews.phase = .loading
-        reviews.errorMessage = nil
-        let token: String
-        do {
-            guard let saved = try credential() else { throw GitHubAPIError.invalidToken }
-            token = saved
-        } catch {
-            let message = Self.message(for: error)
-            authored.phase = .failed
-            authored.errorMessage = message
-            reviews.phase = .failed
-            reviews.errorMessage = message
-            return
+        var work: [(GitHubTokenConnection, String)] = []
+        for row in connections {
+            sources[row.id]?.authored.phase = .loading
+            sources[row.id]?.authored.errorMessage = nil
+            sources[row.id]?.reviews.phase = .loading
+            sources[row.id]?.reviews.errorMessage = nil
+            do {
+                guard row.account != nil, let token = try credential(row.storageAccount) else {
+                    throw GitHubAPIError.invalidToken
+                }
+                work.append((row, token))
+            } catch {
+                sources[row.id]?.authored.phase = .failed
+                sources[row.id]?.reviews.phase = .failed
+                sources[row.id]?.authored.errorMessage = Self.message(for: error)
+                sources[row.id]?.reviews.errorMessage = Self.message(for: error)
+            }
         }
+        rebuild()
         let session = session
         task = Task {
-            async let authored: Void = loadSection(account: account, token: token, reviews: false, session: session)
-            async let reviews: Void = loadSection(account: account, token: token, reviews: true, session: session)
-            _ = await (authored, reviews)
+            // At most two token scopes, each with two independent section queries.
+            await withTaskGroup(of: Void.self) { group in
+                var iterator = work.makeIterator()
+                for _ in 0..<2 {
+                    if let (row, token) = iterator.next() {
+                        group.addTask { await self.loadSource(row, token: token, session: session) }
+                    }
+                }
+                while await group.next() != nil {
+                    guard !Task.isCancelled else { group.cancelAll(); break }
+                    if let (row, token) = iterator.next() {
+                        group.addTask { await self.loadSource(row, token: token, session: session) }
+                    }
+                }
+            }
             if self.session == session { task = nil }
         }
     }
 
-    private func loadSection(account: GitHubAccount, token: String, reviews isReview: Bool, session: UUID) async {
+    private func loadSource(_ row: GitHubTokenConnection, token: String, session: UUID) async {
+        guard let account = row.account, !Task.isCancelled else { return }
+        async let authored: Void = loadSection(id: row.id, account: account, token: token, reviews: false, session: session)
+        async let reviews: Void = loadSection(id: row.id, account: account, token: token, reviews: true, session: session)
+        _ = await (authored, reviews)
+    }
+
+    private func loadSection(id: UUID, account: GitHubAccount, token: String, reviews isReview: Bool, session: UUID) async {
         do {
             let result = try await fetch(account, token, isReview)
             guard self.session == session, !Task.isCancelled else { return }
             let state = PullRequestSectionState(phase: .loaded, result: result, updatedAt: now())
-            if isReview { reviews = state } else { authored = state }
+            if isReview { sources[id]?.reviews = state } else { sources[id]?.authored = state }
         } catch {
-            guard self.session == session, !Task.isCancelled else { return }
-            var state = isReview ? reviews : authored
+            guard self.session == session, !Task.isCancelled, let source = sources[id] else { return }
+            var state = isReview ? source.reviews : source.authored
             if error is CancellationError {
                 state.phase = state.result == nil ? .idle : .loaded
             } else {
                 state.phase = .failed
                 state.errorMessage = Self.message(for: error)
             }
-            if isReview { reviews = state } else { authored = state }
+            if isReview { sources[id]?.reviews = state } else { sources[id]?.authored = state }
         }
+        rebuild()
+    }
+
+    private func rebuild() {
+        authored = aggregate(review: false)
+        reviews = aggregate(review: true)
+    }
+
+    private func aggregate(review: Bool) -> PullRequestSectionState {
+        let entries = connections.compactMap { row -> (String, PullRequestSectionState)? in
+            guard let source = sources[row.id] else { return nil }
+            return (row.resourceOwner, review ? source.reviews : source.authored)
+        }
+        let states = entries.map(\.1)
+        let results = states.compactMap(\.result)
+        let failures = entries.compactMap { label, state in state.errorMessage.map { "\(label): \($0)" } }
+        let phase: PullRequestSectionState.Phase = states.contains { $0.phase == .loading } ? .loading
+            : !failures.isEmpty ? .failed : results.isEmpty ? .idle : .loaded
+        return PullRequestSectionState(phase: phase,
+                                       result: results.isEmpty ? nil : .merged(results),
+                                       errorMessage: failures.isEmpty ? nil : entries.count == 1 ? states.first?.errorMessage : failures.joined(separator: "\n"),
+                                       updatedAt: states.compactMap(\.updatedAt).min())
     }
 
     private static func message(for error: Error) -> String {
         if let error = error as? GitHubAPIError {
             switch error {
-            case .invalidToken: return "Your GitHub connection needs attention. Reconnect in Settings."
-            case .forbidden: return "Some repositories may be inaccessible. Check token permissions and organization approval in Settings."
+            case .invalidToken: return "Your GitHub connection needs attention. Replace its token in Settings."
+            case .forbidden: return "GitHub denied access. Check token permissions and organization approval in Settings."
             default: return error.localizedDescription
             }
         }

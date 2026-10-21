@@ -17,6 +17,7 @@ struct GitHubPullRequestDiscoveryResult: Equatable, Sendable {
 
     enum CoverageLimitation: Sendable {
         // Search cannot report repositories hidden by a token's permissions or approval state.
+        case conflictingMetadata
         case tokenVisibility
         case directReviewRequestsOnly
     }
@@ -138,5 +139,41 @@ struct GitHubPullRequestDiscovery: Sendable {
         let first: Int
         let after: String?
         let includeReviewRequests: Bool
+    }
+}
+
+
+extension GitHubPullRequestDiscoveryResult {
+    static func merged(_ results: [Self]) -> Self {
+        var byID: [String: GitHubPullRequest] = [:]
+        var coverage = results.reduce(into: Set<CoverageLimitation>()) { $0.formUnion($1.coverageLimitations) }
+        for result in results {
+            for pr in result.pullRequests {
+                guard let old = byID[pr.id] else { byID[pr.id] = pr; continue }
+                let newest = pr.updatedAt > old.updatedAt ? pr : old
+                let other = pr.updatedAt > old.updatedAt ? old : pr
+                let sameSnapshot = newest.updatedAt == other.updatedAt
+                let decisions = [old.reviewStatus, pr.reviewStatus].compactMap { $0 }.filter { $0 != .unknown }
+                let conflict = Set(decisions.map(\.rawValue)).count > 1
+                if conflict { coverage.insert(.conflictingMetadata) }
+                let status: GitHubReviewStatus? = conflict ? .unknown : sameSnapshot
+                    ? decisions.first ?? newest.reviewStatus : newest.reviewStatus
+                let reviewsDisagree = sameSnapshot && old.latestReviews != nil && pr.latestReviews != nil
+                    && old.latestReviews != pr.latestReviews
+                if reviewsDisagree { coverage.insert(.conflictingMetadata) }
+                byID[pr.id] = GitHubPullRequest(
+                    id: newest.id, number: newest.number, title: newest.title, url: newest.url,
+                    repository: newest.repository, authorLogin: newest.authorLogin ?? other.authorLogin,
+                    isDraft: newest.isDraft, createdAt: newest.createdAt, updatedAt: newest.updatedAt,
+                    reviewStatus: status,
+                    latestReviews: reviewsDisagree ? nil : newest.latestReviews ?? (sameSnapshot ? other.latestReviews : nil),
+                    checkStatus: newest.checkStatus,
+                    reviewRequests: newest.reviewRequests ?? (sameSnapshot ? other.reviewRequests : nil))
+            }
+        }
+        return Self(pullRequests: byID.values.sorted {
+            $0.updatedAt == $1.updatedAt ? $0.id < $1.id : $0.updatedAt > $1.updatedAt
+        }, truncationReasons: results.reduce(into: []) { $0.formUnion($1.truncationReasons) },
+                    coverageLimitations: coverage)
     }
 }
