@@ -61,8 +61,7 @@ struct MenuBarView: View {
             Divider()
             footer
         }
-        .frame(minWidth: 0, idealWidth: DashboardLayout.width(availableScreenWidth: screenFrame.width),
-               maxWidth: DashboardLayout.width(availableScreenWidth: screenFrame.width))
+        .frame(width: DashboardLayout.width)
         .background(Color(nsColor: .windowBackgroundColor))
         .onAppear { dashboard.loadIfNeeded() }
         .onChange(of: selection) { _, _ in listContentHeight = nil }

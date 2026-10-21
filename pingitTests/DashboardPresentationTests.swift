@@ -83,10 +83,8 @@ struct DashboardPresentationTests {
         #expect(inbox.label(in: .init()).hasSuffix("—"))
     }
 
-    @Test func dashboardFitsAvailableScreenAndBoundsTheScrollingRegion() {
-        #expect(DashboardLayout.width(availableScreenWidth: 1440) == 460)
-        #expect(DashboardLayout.width(availableScreenWidth: 400) == 368)
-        #expect(DashboardLayout.width(availableScreenWidth: 280) <= 280)
+    @Test func dashboardPreservesOriginalWidthAndBoundsTheScrollingRegion() {
+        #expect(DashboardLayout.width == 440)
         #expect(DashboardLayout.listHeight(rowCount: 200, availableScreenHeight: 900) == 420)
         #expect(DashboardLayout.listHeight(rowCount: 200, availableScreenHeight: 500) == 240)
         #expect(DashboardLayout.listHeight(rowCount: 1, availableScreenHeight: 900) == 144)

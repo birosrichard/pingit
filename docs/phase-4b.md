@@ -3,6 +3,10 @@
 Implemented on 2026-10-21 (Europe/Prague). This phase changes native presentation,
 not authentication, GitHub queries, PR discovery, CI normalization or refresh policy.
 
+Follow-up: restored the original fixed 440-point popover width after the flexible
+frame allowed the live menu-bar window to become too narrow. The comparison and
+rendering notes below describe the initial Phase 4B implementation.
+
 ## UI changes and comparison with the reference
 
 The supplied concept establishes a strong header, clear navigation, a separated PR

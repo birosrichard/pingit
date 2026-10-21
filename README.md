@@ -12,7 +12,7 @@ CI query, domain and tests remain intact. Unavailable CI alone no longer raises 
 dashboard warning; real discovery/authentication failures and partial results remain
 visible. Review approval never establishes merge readiness.
 
-The popover adapts up to 460 points, keeps header/tabs/footer outside the scrolling
+The popover retains its original fixed 440-point width, keeps header/tabs/footer outside the scrolling
 list, and retains manual Refresh/⌘R and the 60-second on-open freshness policy.
 No background polling or notifications. See [Phase 4B design and validation](docs/phase-4b.md),
 [review semantics](docs/reviews.md), [retained CI implementation](docs/checks.md), and

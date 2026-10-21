@@ -64,15 +64,12 @@ struct PullRequestEmptyPresentation: Equatable {
 
 // A small shared spacing scale for the native popover, not a separate theme system.
 enum DashboardLayout {
+    static let width: CGFloat = 440
     static let horizontalInset: CGFloat = 20
     static let listInset: CGFloat = 16
     static let rowInset: CGFloat = 12
     static let avatarSize: CGFloat = 36
     static let avatarSpacing: CGFloat = 12
-
-    static func width(availableScreenWidth: CGFloat) -> CGFloat {
-        min(460, max(1, availableScreenWidth - 32))
-    }
 
     static func listHeight(rowCount: Int, availableScreenHeight: CGFloat, contentHeight: CGFloat? = nil) -> CGFloat {
         let initialHeight = max(144, CGFloat(max(0, rowCount)) * 108)
