@@ -15,6 +15,8 @@ final class NotificationCoordinator {
     @ObservationIgnored private var pending: [NotificationMessage] = []
     @ObservationIgnored private var seen: Set<String> = []
     @ObservationIgnored private var seenOrder: [String] = []
+    @ObservationIgnored private weak var dashboard: PullRequestDashboard?
+    @ObservationIgnored private var stopped = false
     private(set) var isDelivering = false
     // Best effort, bounded memory; Phase 5B owns durable baseline deduplication.
     static let pendingLimit = 100
@@ -26,8 +28,29 @@ final class NotificationCoordinator {
         preferences.onChange = { [weak self] in self?.cancelPending() }
     }
 
+    func start(dashboard: PullRequestDashboard) {
+        if let previous = self.dashboard, previous !== dashboard {
+            previous.onChanges = nil
+            previous.onChangeDeliveryInvalidated = nil
+            cancelPending()
+        }
+        stopped = false
+        self.dashboard = dashboard
+        dashboard.onChanges = { [weak self] in self?.consume($0) }
+        dashboard.onChangeDeliveryInvalidated = { [weak self] in self?.cancelPending() }
+    }
+
+    func stop() {
+        stopped = true
+        permissionGeneration += 1
+        dashboard?.onChanges = nil
+        dashboard?.onChangeDeliveryInvalidated = nil
+        dashboard = nil
+        cancelPending()
+    }
+
     func consume(_ events: [PullRequestChangeEvent]) {
-        guard preferences.enabled else { return }
+        guard !stopped, preferences.enabled else { return }
         for event in events {
             guard preferences.allows(event.kind),
                   let message = NotificationMessage(event: event, sound: preferences.sound),
@@ -85,7 +108,7 @@ final class NotificationCoordinator {
         permissionGeneration += 1
         let generation = permissionGeneration
         let status = await service.authorizationStatus()
-        guard generation == permissionGeneration, !Task.isCancelled else { return }
+        guard !stopped, generation == permissionGeneration, !Task.isCancelled else { return }
         permission = status
     }
 
@@ -93,12 +116,12 @@ final class NotificationCoordinator {
 
     // Called only by the explicit Settings button, never by launch, polling or a toggle.
     func requestPermission() async {
-        guard !isRequestingPermission else { return }
+        guard !stopped, !isRequestingPermission else { return }
         isRequestingPermission = true
         errorMessage = nil
         defer { isRequestingPermission = false }
         await refreshAuthorization()
-        guard !Task.isCancelled, permission == .notDetermined else { return }
+        guard !stopped, !Task.isCancelled, permission == .notDetermined else { return }
         do { try await service.requestAuthorization() }
         catch { errorMessage = "Couldn’t request notification permission. Try again in Settings." }
         await refreshAuthorization()

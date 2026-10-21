@@ -91,6 +91,8 @@ final class PullRequestDashboard {
     @ObservationIgnored private var refreshSequence: UInt64 = 0
     // One replaceable consumer, no replay buffer or accumulated activity history.
     @ObservationIgnored var onChanges: (@MainActor ([PullRequestChangeEvent]) -> Void)?
+    // Invalidate downstream asynchronous delivery with the same lifecycle/session boundary.
+    @ObservationIgnored var onChangeDeliveryInvalidated: (@MainActor () -> Void)?
     private(set) var changeDetectionStorageFailed = false
 
     @ObservationIgnored private let credential: (String) throws -> String?
@@ -222,6 +224,7 @@ final class PullRequestDashboard {
     }
 
     private func invalidateRefresh() {
+        onChangeDeliveryInvalidated?()
         session = UUID()
         task?.cancel()
         watchdog?.cancel()
