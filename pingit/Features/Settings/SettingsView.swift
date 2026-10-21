@@ -19,7 +19,7 @@ struct SettingsView: View {
                     .foregroundStyle(.secondary)
             }
 
-            Section("About GitPingly") {
+            Section("About pingit") {
                 LabeledContent("Version", value: version)
                 LabeledContent("Build", value: build)
             }

@@ -12,7 +12,7 @@ struct MenuBarView: View {
                     .foregroundStyle(.tint)
                     .accessibilityHidden(true)
 
-                Text("GitPingly")
+                Text("pingit")
                     .font(.headline)
 
                 Spacer()
@@ -57,7 +57,7 @@ struct MenuBarView: View {
 
                 Spacer()
 
-                Button("Quit GitPingly") {
+                Button("Quit pingit") {
                     NSApplication.shared.terminate(nil)
                 }
                 .keyboardShortcut("q")

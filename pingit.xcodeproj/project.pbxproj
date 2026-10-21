@@ -7,17 +7,17 @@
 /* Begin PBXBuildFile section */
         A10000000000000000000003 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000007 /* SettingsView.swift */; };
         A10000000000000000000002 /* MenuBarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000006 /* MenuBarView.swift */; };
-        A10000000000000000000001 /* GitPinglyApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000001 /* GitPinglyApp.swift */; };
+        A10000000000000000000001 /* PingitApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000001 /* PingitApp.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
         A20000000000000000000007 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
         A20000000000000000000006 /* MenuBarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarView.swift; sourceTree = "<group>"; };
-        A20000000000000000000001 /* GitPinglyApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GitPinglyApp.swift; sourceTree = "<group>"; };
+        A20000000000000000000001 /* PingitApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PingitApp.swift; sourceTree = "<group>"; };
         A20000000000000000000002 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
-        A20000000000000000000003 /* GitPingly.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = GitPingly.entitlements; sourceTree = "<group>"; };
+        A20000000000000000000003 /* pingit.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = pingit.entitlements; sourceTree = "<group>"; };
         A20000000000000000000004 /* App.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = App.xcconfig; sourceTree = "<group>"; };
-        A20000000000000000000005 /* GitPingly.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = GitPingly.app; sourceTree = BUILT_PRODUCTS_DIR; };
+        A20000000000000000000005 /* pingit.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = pingit.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -30,31 +30,31 @@
         A40000000000000000000008 /* MenuBar */ = {isa = PBXGroup; children = (A20000000000000000000006 /* MenuBarView.swift */); path = MenuBar; sourceTree = "<group>"; };
         A40000000000000000000001 = {
             isa = PBXGroup;
-            children = (A40000000000000000000002 /* GitPingly */, A40000000000000000000005 /* Configuration */, A40000000000000000000006 /* Products */);
+            children = (A40000000000000000000002 /* pingit */, A40000000000000000000005 /* Configuration */, A40000000000000000000006 /* Products */);
             sourceTree = "<group>";
         };
-        A40000000000000000000002 /* GitPingly */ = {
+        A40000000000000000000002 /* pingit */ = {
             isa = PBXGroup;
             children = (A40000000000000000000003 /* App */, A40000000000000000000007 /* Features */, A40000000000000000000004 /* Resources */);
-            path = GitPingly;
+            path = pingit;
             sourceTree = "<group>";
         };
-        A40000000000000000000003 /* App */ = {isa = PBXGroup; children = (A20000000000000000000001 /* GitPinglyApp.swift */); path = App; sourceTree = "<group>"; };
-        A40000000000000000000004 /* Resources */ = {isa = PBXGroup; children = (A20000000000000000000002 /* Info.plist */, A20000000000000000000003 /* GitPingly.entitlements */); path = Resources; sourceTree = "<group>"; };
+        A40000000000000000000003 /* App */ = {isa = PBXGroup; children = (A20000000000000000000001 /* PingitApp.swift */); path = App; sourceTree = "<group>"; };
+        A40000000000000000000004 /* Resources */ = {isa = PBXGroup; children = (A20000000000000000000002 /* Info.plist */, A20000000000000000000003 /* pingit.entitlements */); path = Resources; sourceTree = "<group>"; };
         A40000000000000000000005 /* Configuration */ = {isa = PBXGroup; children = (A20000000000000000000004 /* App.xcconfig */); path = Configuration; sourceTree = "<group>"; };
-        A40000000000000000000006 /* Products */ = {isa = PBXGroup; children = (A20000000000000000000005 /* GitPingly.app */); name = Products; sourceTree = "<group>"; };
+        A40000000000000000000006 /* Products */ = {isa = PBXGroup; children = (A20000000000000000000005 /* pingit.app */); name = Products; sourceTree = "<group>"; };
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-        A50000000000000000000001 /* GitPingly */ = {
+        A50000000000000000000001 /* pingit */ = {
             isa = PBXNativeTarget;
             buildConfigurationList = A80000000000000000000002;
             buildPhases = (A70000000000000000000001 /* Sources */, A30000000000000000000001 /* Frameworks */, A70000000000000000000002 /* Resources */);
             buildRules = ();
             dependencies = ();
-            name = GitPingly;
-            productName = GitPingly;
-            productReference = A20000000000000000000005 /* GitPingly.app */;
+            name = pingit;
+            productName = pingit;
+            productReference = A20000000000000000000005 /* pingit.app */;
             productType = "com.apple.product-type.application";
         };
 /* End PBXNativeTarget section */
@@ -77,7 +77,7 @@
             productRefGroup = A40000000000000000000006 /* Products */;
             projectDirPath = "";
             projectRoot = "";
-            targets = (A50000000000000000000001 /* GitPingly */);
+            targets = (A50000000000000000000001 /* pingit */);
         };
 /* End PBXProject section */
 
@@ -86,7 +86,7 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
-        A70000000000000000000001 = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (A10000000000000000000001 /* GitPinglyApp.swift in Sources */, A10000000000000000000002 /* MenuBarView.swift in Sources */, A10000000000000000000003 /* SettingsView.swift in Sources */); runOnlyForDeploymentPostprocessing = 0; };
+        A70000000000000000000001 = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (A10000000000000000000001 /* PingitApp.swift in Sources */, A10000000000000000000002 /* MenuBarView.swift in Sources */, A10000000000000000000003 /* SettingsView.swift in Sources */); runOnlyForDeploymentPostprocessing = 0; };
 /* End PBXSourcesBuildPhase section */
 
 /* Begin XCBuildConfiguration section */

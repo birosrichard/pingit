@@ -1,9 +1,9 @@
 import SwiftUI
 
 @main
-struct GitPinglyApp: App {
+struct PingitApp: App {
     var body: some Scene {
-        MenuBarExtra("GitPingly", systemImage: "bell.badge") {
+        MenuBarExtra("pingit", systemImage: "bell.badge") {
             MenuBarView()
         }
         .menuBarExtraStyle(.window)
