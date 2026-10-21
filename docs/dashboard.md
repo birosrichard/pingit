@@ -1,3 +1,10 @@
+> Phase 3F updates: structural limits now appear under neutral **Discovery info**.
+> Observed truncation/conflicts show **Partial results**; errors show **GitHub needs
+> attention**. Authored/draft rows use meaningful individual-review fallbacks for
+> null decisions without changing the authoritative value. See
+> [review mapping](reviews.md#dashboard-presentation-phase-3f) and
+> [validation](phase-3f.md). Historical validation sections below describe earlier builds.
+
 > Current Phase 3E behavior extends the Phase 3D implementation described below:
 > the dashboard owns results per token and section, merging their union by node ID.
 > A failed scope retains stale rows and a named error, while other scopes continue.
@@ -18,10 +25,9 @@ The popover is 440 points wide with opaque, system-aware header/footer and
 contrasting content surfaces. Header, navigation and footer
 stay visible; only the PR list scrolls, up to 360 points. Short lists shrink and
 empty states use 180 points. Rows show a two-line title, repository and PR number,
-relative update age (with a full-date tooltip), and either author or authoritative
-review decision. Hover highlighting, native Links and keyboard focus remain.
+relative update age (with a full-date tooltip), and either author or review summary. Hover highlighting, native Links and keyboard focus remain.
 Approved does not establish merge readiness. Review and CI are separate indicators;
-unknown review decisions stay neutral, and absent CI data displays no CI indicator.
+unknown review decisions use neutral activity fallbacks where supported, and absent CI data displays no CI indicator.
 Discovery still does not fetch CI.
 
 The footer shows an always-visible coverage/details button. Any error in either
@@ -172,7 +178,7 @@ then choose review/activity work (roadmap Phase 4) or read-only CI integration
 3. Press ⌘R: progress appears and Refresh is disabled while cached rows stay visible.
    Temporarily go offline and refresh: the footer must show GitHub needs attention,
    with details and previous results. Restore networking and refresh.
-4. Open Limited coverage: repository visibility and direct-only limits must be
+4. Open Discovery info: repository visibility and direct-only limits must be
    readable. Inspect any naturally occurring partial-token or authentication
    failure in the details panel and Settings; do not change token access to test it.
 

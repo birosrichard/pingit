@@ -1,4 +1,4 @@
-# Pull request review status (Phase 3C)
+# Pull request review status (Phases 3C–3F)
 
 ## Overall decision
 
@@ -79,11 +79,44 @@ private organization access, and permission behavior were not validated here and
 still need a signed-app acceptance pass.
 No credential was extracted into a shell or a file for validation.
 
-## Dashboard integration (Phase 3D)
+## Dashboard presentation (Phase 3F)
 
-The authored section displays the authoritative decision as Approved, Changes
-requested, Review required, or Review status unknown, alongside a separate draft
-indicator. No decision is inferred from individual reviews. Approval is never
-labeled merge-ready. Latest-review details remain available in the domain but
-are not expanded in the compact dashboard. See [dashboard](dashboard.md) for current
-validation and the remaining manual acceptance checklist.
+`PullRequestReviewPresentation` supplies compact row labels, semantic icons/colors,
+and the same detailed description for help and accessibility. It never mutates
+`reviewStatus`. My PRs and Drafts show the review summary; Review retains its author
+metadata. The layout is unchanged.
+
+| GitHub overall decision | Latest reviewer activity | Row label |
+| --- | --- | --- |
+| APPROVED | Any | Approved |
+| CHANGES_REQUESTED | Any | Changes requested |
+| REVIEW_REQUIRED | Any | Review required |
+| Unknown/null | Complete, empty connection | No reviews yet |
+| Unknown/null | Identifiable approval(s) | 1 approval / 2 approvals |
+| Unknown/null | Identifiable approval(s), incomplete details | At least 1 approval / At least 2 approvals |
+| Unknown/null | Identifiable changes requested, including mixed approvals | Changes requested by reviewer |
+| Unknown/null | Comments, without approvals or changes requested | Review comments |
+| Unknown/null | Unavailable/empty incomplete details, dismissed/pending/unknown states only, or missing identities only | No review decision |
+
+Approval counts deduplicate reviewer logins case-insensitively. Bots are included:
+`author { login }` uses GitHub's Actor interface, which includes Bot, with no User-only
+fragment or login validation in review mapping. Both `macroscopeapp` and a login
+ending in `[bot]` survive decoding. Missing identities remain in domain details but
+are not counted as identifiable approvals. Dismissed, superseded, pending and unknown
+states do not supply approvals. An empty list is considered empty only when its
+limitations are empty; it never implies that repository rules require approval.
+
+Fallback approvals use neutral color and an outline review bubble, distinct from
+GitHub's authoritative Approved status. Tooltips expose mixed activity and incomplete
+details and explicitly avoid a merge-readiness claim. Individual review activity
+is not an effective branch-protection vote ledger.
+
+Same-snapshot token merging preserves compatible incomplete review lists by unioning
+review IDs and limitations. It does not manufacture completeness. Complete supersets
+replace incomplete subsets; unavailable details yield to available details. Contradictory
+states/IDs for the same reviewer remain a conflict and hide the ambiguous list for
+that merge, including when a third token agrees with one side. Older snapshots do
+not fill newer review data. See [token merge policy](tokens.md).
+
+No production query or API-request count changed in Phase 3F. See
+[Phase 3F validation](phase-3f.md) for fixtures, live connector results, and limits.

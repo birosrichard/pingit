@@ -96,7 +96,9 @@ node ID for deterministic ties, independent of task completion order. Merge poli
   conflict is found, a third agreeing token cannot erase it during that merge.
 - Available reviewer details can replace unavailable details. A complete list can
   replace an incomplete compatible subset. Contradictory details are withheld and
-  warned about; individual reviews never calculate the overall decision.
+  warned about; individual reviews never calculate the overall decision. Compatible
+  incomplete same-snapshot lists now union their review IDs and limitation flags,
+  retaining useful activity without implying completeness (Phase 3F).
 - Contradictory complete request lists are withheld with a warning. Equal-timestamp
   draft disagreement is warned about and displayed conservatively as draft.
 - Union pagination and coverage reasons. Each source retains its original metadata,
@@ -160,7 +162,8 @@ No private PR content is persisted across launches.
    Compare only repositories selected/visible to these PATs. Personal PRs must remain;
    organization PRs appear only when repository access and approval permit them.
    Check a known overlap appears once per section, plus drafts, decisions, counts,
-   timestamps, browser links and always-visible token coverage warnings.
+   timestamps, browser links, neutral token coverage information, and visible
+   warnings for actual failures.
 6. If an organization token is pending/denied, confirm the UI does not claim private
    access. An explicit error must name the scope and leave personal results visible.
    Empty organization results alone cannot verify access. Use an existing known

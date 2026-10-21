@@ -117,8 +117,9 @@ Every result, including an empty one, carries `coverageLimitations: [.tokenVisib
 outside token selection, the resource owner or approval/access policy. Neither a
 successful `/user` response nor an exhausted search proves global PR coverage. There
 is no permission inventory endpoint used here, so the service cannot reliably tell
-whether an empty search means no PRs or restricted visibility. Consumers must present
-that limitation even when `isTruncated` is false. Explicit permission errors propagate
+whether an empty search means no PRs or restricted visibility. Consumers expose
+that limitation in neutral discovery information even when `isTruncated` is false;
+structural scope alone does not produce a warning. Explicit permission errors propagate
 rather than becoming empty lists. Existing saved tokens are not upgraded automatically.
 
 ## Validation and next phase
@@ -136,3 +137,22 @@ both lists, errors, timestamps, truncation, and coverage. See [dashboard](dashbo
 for current validation and remaining live acceptance. Team discovery still needs its
 own scope, tests, and access/visibility policy. CI aggregation, activity
 tracking, polling and notifications stay deferred.
+
+## Coverage presentation (Phase 3F)
+
+The domain metadata above is unchanged. `DiscoveryCoveragePresentation` interprets
+both dashboard sections so a problem remains visible from every tab:
+
+- **Discovery info**, secondary text and an info icon: successful discovery with
+  token visibility/direct-only limitations. Details retain both structural notes;
+  this never claims GitHub-wide coverage.
+- **Partial results**, orange warning icon: search/page/result/review-request bounds,
+  unusable cursors, or conflicting token metadata in either section.
+- **GitHub needs attention**, orange warning icon: connection or section errors,
+  including rate limits and API failures. Named per-token errors and stale results
+  remain available. This also works when no result has ever succeeded.
+
+The help and VoiceOver label contain the warning and its actual reasons. A successful
+refresh replaces old coverage metadata and clears transient errors; the current
+refresh/caching policy is unchanged. Per-PR reviewer truncation is described in that
+row's review tooltip, independently of discovery truncation.
