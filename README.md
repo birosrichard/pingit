@@ -20,10 +20,15 @@ for normal review. Submitted reviews and GitHub's authoritative data remain inta
 Background sync runs while the app is open, even with the popover closed, every
 5 minutes by default. **Settings → Background Sync** can disable it or select
 2, 5, 10, 15 or 30 minutes. Manual refresh remains available. Token-specific retry
-restrictions protect rate limits and preserve stale results on failure. No
-notifications are generated. A minimal local baseline detects direct review-request,
-review and draft-ready changes across refreshes and restarts; titles, repository
-names and event history are never persisted. See [change detection and validation](docs/phase-5b.md),
+restrictions protect rate limits and preserve stale results on failure. Native
+notifications are opt-in under **Settings → Notifications**, with independent event
+switches and explicit macOS permission. Private PR metadata may appear in macOS
+Notification Center when enabled. A minimal local baseline detects direct
+review-request, review and draft-ready changes across refreshes and restarts; that
+baseline excludes titles, repository names and event history.
+**Phase 5C is not compiled or tested on macOS — awaiting local validation.**
+See [notification behavior, privacy and macOS acceptance](docs/phase-5c.md),
+[change detection and validation](docs/phase-5b.md),
 [background sync and validation](docs/phase-5a.md),
 [Phase 4C polish and validation](docs/phase-4c.md),
 [Phase 4B design and validation](docs/phase-4b.md),

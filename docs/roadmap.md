@@ -2,8 +2,9 @@
 
 Phases 1–3F, 4A (CI/diff metadata), 4B (native dashboard refinement),
 [4C (final dashboard polish)](phase-4c.md), [5A (background sync)](phase-5a.md),
-and [5B (change detection)](phase-5b.md) are implemented. Further activity,
-notifications and distribution remain separately scoped.
+[5B (change detection)](phase-5b.md), and [5C (native notifications)](phase-5c.md)
+are implemented. Phase 5C awaits macOS compilation and runtime acceptance.
+Further activity and distribution remain separately scoped.
 Keep each phase independently buildable and validate before moving on.
 
 ## 1. Project foundation
@@ -138,15 +139,18 @@ Keep each phase independently buildable and validate before moving on.
 - See [semantics, consistency guarantees and known limits](phase-5b.md).
 - Live read-only event acceptance and notification delivery remain separate work.
 
-## 6. Native notifications — future scope
+## 5C. Native notifications — implemented, macOS validation pending
 
-- Consume Phase 5B events and add opt-in macOS notifications.
-- Acceptance: only meaningful new events notify; repeated polls do not duplicate
-  alerts; sleep/wake, offline recovery, permission denial, and quit behave cleanly.
+- Consume committed Phase 5B events through an application-lifetime native service.
+- Opt-in master, explicit permission, persistent event/sound preferences, PR grouping,
+  bounded deduplication and validated GitHub click activation.
+- Mocked Swift Testing coverage written; Linux static checks pass.
+- Not compiled or tested on macOS; signed delivery, strict Swift 6 and lifecycle
+  acceptance remain pending. See [implementation and checklist](phase-5c.md).
 
 ## 7. Preferences and reliability
 
-- Add repository selection and notification preferences with persistence.
+- Add repository selection and further reliability refinements; notification preferences ship in Phase 5C.
 - Acceptance: choices survive restart and apply to filtering/alerts; credential
   boundaries remain intact; error recovery, accessibility, and resource usage
   are tested with representative workloads. No unnecessary idle work.

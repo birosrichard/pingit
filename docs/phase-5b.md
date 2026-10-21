@@ -24,7 +24,8 @@ the same refresh flight; cancelled workers still drain before another flight sta
 `dashboard.onChanges` is a single replaceable main-actor callback receiving one
 committed batch. It has no subscribers list, replay buffer, queue, retained last
 batch or history. With no consumer, events are discarded after baseline advancement.
-Future Phase 5D code can install this callback. `changeDetectionStorageFailed`
+Phase 5C now installs this callback for notifications; see its separate validation
+report. `changeDetectionStorageFailed`
 exposes a fixed internal failure flag without raw errors or private snapshot data.
 Mocked connection initializers keep persistence disabled unless explicitly injected.
 
@@ -209,9 +210,10 @@ across incomplete/conflicting data or affected token scopes may be intentionally
 missed while a trustworthy baseline is reestablished. Retained inaccessible state
 can eventually hit the storage cap, which fails closed without eviction.
 
-Recommended next phase: review this event contract and perform signed live read-only
-acceptance, then separately scope the notification work planned for Phase 5D. Native
-notification delivery/permissions and any activity feed still need explicit scope.
+Phase 5B signed live read-only event acceptance remains recommended. Native
+notification delivery/permissions are implemented in [Phase 5C](phase-5c.md), with
+macOS compilation and runtime validation still pending. An activity feed remains
+outside the implemented scope. This report's build/test results apply to Phase 5B.
 
 ## Incremental commits
 

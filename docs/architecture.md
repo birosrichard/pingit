@@ -163,7 +163,7 @@ coverage protect request removals and token reconciliation.
 A bounded versioned JSON snapshot in Application Support persists identifiers,
 state and comparability flags, omitting titles, repository names, URLs, credentials
 and event history. Private atomic writes commit before `dashboard.onChanges`, the
-single replaceable callback for future notification code. No consumer means events
+single replaceable callback consumed by Phase 5C notification code. No consumer means events
 are discarded, with no replay buffer. First sync and corrupt/incompatible storage
 quietly baseline; restart resumes committed comparisons. Delivery is at most once;
 a crash/cancellation between commit and callback can lose an event. See
@@ -223,3 +223,18 @@ validated public owner-avatar lookup is reused with a native repository fallback
 The CI implementation is unchanged. Only its default row presentation and warnings
 caused solely by `checkDataUnavailable` are suppressed; raw coverage metadata,
 real source errors, truncation and metadata conflicts remain. See [Phase 4B](phase-4b.md).
+
+## Phase 5C notifications (macOS validation pending)
+
+The application delegate retains a native notification delegate from will-finish-launch
+through termination and owns the main-actor notification coordinator/service. Settings
+share that coordinator. Committed Phase 5B batches enter its sole `onChanges` consumer;
+refresh invalidation also cancels pending notification work. A mockable main-actor
+service owns authorization and delivery; native delegate callbacks transfer only value
+payloads to main-actor URL activation. Permission requests are explicit user actions.
+
+Seven Boolean preferences persist in UserDefaults. Payloads and bounded deduplication
+IDs remain in memory; notification content is handed to macOS and may be retained by
+Notification Center. The Phase 5B snapshot and credential boundaries are unchanged.
+See [behavior, privacy, tests and macOS acceptance](phase-5c.md). No macOS compilation,
+test execution, signing or notification delivery was performed for Phase 5C on Linux.
