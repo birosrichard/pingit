@@ -413,3 +413,37 @@ extension MultiTokenAuthenticationTests {
         #expect(connection.dashboard.authored.result?.coverageLimitations == [.tokenVisibility])
     }
 }
+
+extension MultiTokenAuthenticationTests {
+    @Test func uncertainMetadataWriteKeepsBothCredentialsForRecovery() async throws {
+        let name = "pingit-tests-" + UUID().uuidString
+        let defaults = try #require(FailingSyncDefaults(suiteName: name))
+        defer { defaults.removePersistentDomain(forName: name) }
+        let keychain = MockKeychain()
+        let http = MockHTTP()
+        let metadata = GitHubConnectionMetadata(defaults: defaults)
+        let connection = GitHubConnection(client: http.client, credentials: keychain.store, metadata: metadata)
+        defer { connection.dashboard.setConnections([], refresh: false) }
+        await connection.connect(token: "old-fixture", resourceOwner: "apify")
+        let row = try #require(connection.connections.first)
+        defaults.failSync = true
+        await connection.connect(token: "new-fixture", resourceOwner: "apify", replacing: row.id)
+        #expect(connection.errorMessage != nil)
+        #expect(keychain.items.count == 2)
+        #expect(try keychain.store.load(account: row.storageAccount) == "old-fixture")
+        defaults.failSync = false
+        let restarted = GitHubConnection(client: http.client, credentials: keychain.store, metadata: metadata)
+        await restarted.restore()
+        let recovered = try #require(restarted.connections.first)
+        #expect(recovered.id == row.id)
+        #expect(try keychain.store.load(account: recovered.storageAccount) == "new-fixture")
+        #expect(keychain.items.count == 1)
+        #expect(restarted.errorMessage == nil)
+    }
+}
+
+// Used only on the main actor; model the ambiguous failure after UserDefaults.set succeeds.
+private final class FailingSyncDefaults: UserDefaults, @unchecked Sendable {
+    var failSync = false
+    override func synchronize() -> Bool { failSync ? false : super.synchronize() }
+}

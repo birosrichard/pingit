@@ -134,6 +134,7 @@ final class GitHubConnection {
             var row = GitHubTokenConnection(id: id ?? UUID(), account: validated, resourceOwner: label,
                                             validatedAt: Date(), status: "Authenticated · owner unverified")
             if previous != nil { row.credentialID = UUID() }
+            var metadataMayHaveChanged = false
             do {
                 try credentials.save(token, account: row.storageAccount)
                 guard try credentials.load(account: row.storageAccount) == token else {
@@ -142,11 +143,13 @@ final class GitHubConnection {
                 var next = snapshot
                 next.connections = connections.filter { $0.id != id } + [row]
                 if let previous { next.pendingDeletions.append(previous.storageAccount) }
+                metadataMayHaveChanged = true
                 try metadata.save(next)
                 snapshot = next
             } catch {
                 // A failed replacement never overwrites the previous credential.
-                try? credentials.remove(account: row.storageAccount)
+                // Persistence can report failure after writing. Retain both items until recovery knows which is active.
+                if !metadataMayHaveChanged { try? credentials.remove(account: row.storageAccount) }
                 errorMessage = "Couldn’t save the token in macOS Keychain or connection metadata. Unlock your keychain and retry."
                 return
             }
