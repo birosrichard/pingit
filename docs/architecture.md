@@ -51,7 +51,7 @@ The successful `/user` response proves identity, not repository/organization acc
 session, header validation, and sanitized transport handling as account validation.
 Callers supply the existing Keychain token per request; the client retains no token
 and does not own credential storage or invalidation. Variables are `Encodable & Sendable` and
-response data is `Decodable & Sendable`. No query is called by the app in Phase 3A.
+response data is `Decodable & Sendable`. No app scene calls discovery yet.
 
 GraphQL errors are inspected before typed data decoding. Responses containing both
 non-null data and errors throw `partialData`; partial results are deliberately not
@@ -62,14 +62,24 @@ response with zero remaining quota still returns its data. HTTP 401, 403, 429 an
 other statuses remain distinct from malformed JSON/schema failures. No server
 message, raw decoding error, or transport error is exposed. Cancellation is checked
 before transport and after it, and URLSession cancellation remains CancellationError.
-There is no retry, pagination, or generic networking framework.
+The transport has no retry, pagination, or generic networking framework; discovery
+owns its bounded search pagination.
 
 Domain models contain repository/PR identity, display metadata, optional review/check
 status, and user/team review requests. Missing status/requests mean unavailable or
 not loaded; an empty request list means a known empty result. Deleted authors have
-an optional login. Codable uses domain names, not GraphQL connection shapes; future
-query DTOs must map into these values. ISO-8601 decoding is configured by the caller.
+an optional login. Codable uses domain names, not GraphQL connection shapes;
+query DTOs map into these values. Domain Codable decoding uses caller date strategies;
+the discovery mapper handles GitHub ISO-8601 timestamps directly.
 No review/CI aggregation is implemented.
+
+`GitHubPullRequestDiscovery` is a stateless Sendable value around the existing client.
+It accepts the validated account and Keychain token per call, verifies `viewer.login`,
+and queries authored open PRs (including drafts) or direct pending review requests
+(excluding drafts/own PRs). Transport DTOs live in `GitHubPullRequestSearch.swift`.
+Result values carry token visibility/team coverage limits independently of pagination
+truncation. The app lifecycle, authentication state and views are unchanged. See
+[discovery](discovery.md) for query semantics, request bounds, permissions and limitations.
 
 `KeychainCredentialStore` uses the Security SecItem APIs against the macOS Data
 Protection Keychain. One generic password item uses the bundle-specific service
@@ -103,8 +113,8 @@ check catches macOS launch-time rejection; static signature checks alone are ins
 
 ## Future boundaries
 
-Phases 1, 2, and 3A are implemented. Phase 3B will add authored PR/review-request
-queries, transport DTO mapping, and pagination. PR/review data belongs outside views, using
+Phases 1, 2, 3A and 3B are implemented. A future discovery state layer will connect
+explicit refresh to authenticated data access. PR/review data belongs outside views, using
 asynchronous calls with cancellation, pagination, and rate-limit handling. Future
 repository permissions must be documented separately; successful account validation
 must never imply that those permissions exist. Polling and notifications belong

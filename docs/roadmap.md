@@ -1,6 +1,6 @@
 # Development roadmap
 
-Phases 1, 2, and 3A are implemented. Phase 3B and Phases 4–8 remain planned.
+Phases 1, 2, 3A and 3B are implemented. Phase 3C and Phases 4–8 remain planned.
 Keep each phase independently buildable and validate before moving on.
 
 ## 1. Project foundation
@@ -34,13 +34,20 @@ Keep each phase independently buildable and validate before moving on.
 - Independent repository, PR, review/check status, and user/team review-request values.
 - Deterministic mocked tests; no live PR queries, aggregation, or UI changes.
 
-### 3B. Pull request fetching — planned
+### 3B. Pull request discovery — implemented
 
-- Add asynchronous GitHub access for review requests and the user's open PRs.
-- Reuse the authenticated client and existing outbound network entitlement; add
-  only the repository read permissions needed, explaining organization approval.
-- Acceptance: real PRs load; empty, loading, error, pagination, expired-auth, and
-  rate-limit states behave correctly. Refresh performs a user-initiated update.
+- Authored open PR search including drafts; direct active review requests excluding drafts/own PRs.
+- Strict transport mapping, creation/update timestamps and stable node identity.
+- Bounded cursor pagination, deduplication, recent ordering and explicit truncation.
+- Token visibility is always limited; team discovery is explicitly excluded.
+- Mocked tests cover discovery, failures and cancellation; no UI or lifecycle calls yet.
+- See [discovery permissions and limitations](discovery.md). Live token coverage remains unverified.
+
+### 3C. Discovery state and explicit refresh — recommended next scope
+
+- A cancellable state layer using the existing account/Keychain credential.
+- Preserve authored/review results, loading/error state, and coverage/truncation metadata.
+- Plan UI integration separately; do not add polling, notifications or aggregation implicitly.
 
 ## 4. Reviews and relevant activity
 
