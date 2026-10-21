@@ -71,6 +71,20 @@ final class PullRequestDashboard {
     private(set) var account: GitHubAccount?
     private(set) var sources: [UUID: SourceState] = [:]
     var isLoading: Bool { authored.phase == .loading || reviews.phase == .loading }
+    private(set) var isRefreshing = false
+    private(set) var lastAttemptAt: Date?
+    private(set) var lastSuccessfulRefreshAt: Date?
+    let syncPreferences: BackgroundSyncPreferences
+    var nextAutomaticRefresh: TimeInterval? { scheduler.deadline }
+
+    @ObservationIgnored private let scheduler: BackgroundSyncScheduler
+    @ObservationIgnored private let jitter: () -> Double
+    @ObservationIgnored private var syncStates: [UUID: ConnectionSyncState] = [:]
+    @ObservationIgnored private var running = false
+    @ObservationIgnored private var sleeping = false
+    @ObservationIgnored private var pendingRefresh = false
+    @ObservationIgnored private var watchdog: Task<Void, Never>?
+    @ObservationIgnored private var flightErrors: [UUID: [any Error]] = [:]
 
     @ObservationIgnored private let credential: (String) throws -> String?
     @ObservationIgnored private let fetch: Fetch
@@ -82,7 +96,11 @@ final class PullRequestDashboard {
     @ObservationIgnored private var hasRequested = false
 
     init(credentials: KeychainCredentialStore = KeychainCredentialStore(),
-         discovery: GitHubPullRequestDiscovery = GitHubPullRequestDiscovery()) {
+         discovery: GitHubPullRequestDiscovery = GitHubPullRequestDiscovery(),
+         preferences: BackgroundSyncPreferences = BackgroundSyncPreferences(defaults: .standard)) {
+        syncPreferences = preferences
+        scheduler = BackgroundSyncScheduler(clock: .continuous)
+        jitter = { Double.random(in: 0...1) }
         credential = { try credentials.load(account: $0) }
         fetch = { account, token, reviews in
             if reviews { return try await discovery.reviewRequestedPullRequests(for: account, token: token) }
@@ -92,14 +110,22 @@ final class PullRequestDashboard {
     }
 
     init(credential: @escaping () throws -> String?, now: @escaping () -> Date = Date.init,
+         clock: SyncClock = .continuous, jitter: @escaping () -> Double = { Double.random(in: 0...1) },
          fetch: @escaping Fetch) {
+        syncPreferences = BackgroundSyncPreferences()
+        scheduler = BackgroundSyncScheduler(clock: clock)
+        self.jitter = jitter
         self.credential = { _ in try credential() }
         self.now = now
         self.fetch = fetch
     }
 
     init(scopedCredential: @escaping (String) throws -> String?, now: @escaping () -> Date = Date.init,
-         fetch: @escaping Fetch) {
+         clock: SyncClock = .continuous, jitter: @escaping () -> Double = { Double.random(in: 0...1) },
+         preferences: BackgroundSyncPreferences = BackgroundSyncPreferences(), fetch: @escaping Fetch) {
+        syncPreferences = preferences
+        scheduler = BackgroundSyncScheduler(clock: clock)
+        self.jitter = jitter
         credential = scopedCredential
         self.now = now
         self.fetch = fetch
@@ -113,9 +139,12 @@ final class PullRequestDashboard {
     }
 
     func setConnections(_ rows: [GitHubTokenConnection], refresh shouldRefresh: Bool) {
-        task?.cancel()
-        task = nil
-        session = UUID()
+        guard rows != connections else { return }
+        invalidateRefresh()
+        syncStates = Dictionary(uniqueKeysWithValues: rows.map { row in
+            let sameCredential = sources[row.id]?.connection.storageAccount == row.storageAccount
+            return (row.id, sameCredential ? syncStates[row.id] ?? .init() : .init())
+        })
         connections = rows
         if rows.isEmpty { hasRequested = false }
         account = rows.compactMap(\.account).first
@@ -133,7 +162,64 @@ final class PullRequestDashboard {
         })
         lastAttempt = nil
         rebuild()
-        if shouldRefresh || hasRequested { refresh() }
+        if rows.isEmpty {
+            lastSuccessfulRefreshAt = nil
+            lastAttemptAt = nil
+        }
+        if shouldRefresh || hasRequested {
+            if task != nil { pendingRefresh = true } else { refresh() }
+        }
+        reschedule()
+    }
+
+    func startBackgroundSync() {
+        guard !running else { return }
+        running = true
+        syncPreferences.onChange = { [weak self] in self?.reschedule() }
+        reschedule()
+    }
+
+    func shutdown() {
+        running = false
+        syncPreferences.onChange = nil
+        scheduler.cancel()
+        invalidateRefresh()
+    }
+
+    func systemWillSleep() {
+        sleeping = true
+        scheduler.cancel()
+        invalidateRefresh()
+        rebuild()
+    }
+
+    func systemDidWake() {
+        sleeping = false
+        reschedule()
+    }
+
+    private func invalidateRefresh() {
+        session = UUID()
+        task?.cancel()
+        watchdog?.cancel()
+        watchdog = nil
+        pendingRefresh = false
+        for id in sources.keys {
+            if sources[id]?.authored.phase == .loading {
+                sources[id]?.authored.phase = sources[id]?.authored.result == nil ? .idle : .loaded
+            }
+            if sources[id]?.reviews.phase == .loading {
+                sources[id]?.reviews.phase = sources[id]?.reviews.result == nil ? .idle : .loaded
+            }
+        }
+    }
+
+    private func reschedule() {
+        let deadline = running && syncPreferences.enabled && !sleeping && task == nil
+            ? connections.filter { $0.account != nil }.compactMap {
+                syncStates[$0.id]?.deadline(interval: syncPreferences.interval)
+            }.min() : nil
+        scheduler.schedule(at: deadline) { [weak self] in self?.refresh(automatic: true) }
     }
 
     func loadIfNeeded() {
@@ -142,12 +228,28 @@ final class PullRequestDashboard {
         refresh()
     }
 
-    func refresh() {
-        guard !connections.isEmpty, !isLoading else { return }
+    // Active requests coalesce into the current flight. Only identity changes queue one follow-up,
+    // after cancelled workers drain; this also prevents old/new credentials from overlapping.
+    func refresh(automatic: Bool = false) {
+        guard !connections.isEmpty, task == nil, !sleeping else { return }
+        let time = scheduler.clock.now()
+        let eligible = connections.filter { row in
+            let state = syncStates[row.id] ?? .init()
+            if let rateDeadline = state.rateLimitedUntil, rateDeadline > time { return false }
+            if automatic {
+                guard row.account != nil, let deadline = state.deadline(interval: syncPreferences.interval) else { return false }
+                return deadline <= time
+            }
+            return true
+        }
+        guard !eligible.isEmpty else { reschedule(); return }
+        scheduler.cancel()
         session = UUID()
         lastAttempt = now()
+        lastAttemptAt = lastAttempt
+        flightErrors = [:]
         var work: [(GitHubTokenConnection, String)] = []
-        for row in connections {
+        for row in eligible {
             sources[row.id]?.authored.phase = .loading
             sources[row.id]?.authored.errorMessage = nil
             sources[row.id]?.reviews.phase = .loading
@@ -162,10 +264,32 @@ final class PullRequestDashboard {
                 sources[row.id]?.reviews.phase = .failed
                 sources[row.id]?.authored.errorMessage = Self.message(for: error)
                 sources[row.id]?.reviews.errorMessage = Self.message(for: error)
+                syncStates[row.id]?.failed(error, time: time, date: now(), jitter: jitter())
             }
         }
         rebuild()
+        guard !work.isEmpty else { reschedule(); return }
+        isRefreshing = true
         let session = session
+        let sleep = scheduler.clock.sleep
+        watchdog = Task { [weak self] in
+            do { try await sleep(time + 120) } catch { return }
+            guard !Task.isCancelled, let self, self.session == session else { return }
+            for row in eligible {
+                for review in [false, true] {
+                    var state = review ? self.sources[row.id]?.reviews : self.sources[row.id]?.authored
+                    guard state?.phase == .loading else { continue }
+                    state?.phase = .failed
+                    state?.errorMessage = "Refresh timed out. Try again later."
+                    if review { self.sources[row.id]?.reviews = state! } else { self.sources[row.id]?.authored = state! }
+                }
+                self.syncStates[row.id]?.failed(GitHubAPIError.networkUnavailable,
+                                                time: self.scheduler.clock.now(), date: self.now(), jitter: self.jitter())
+            }
+            self.session = UUID()
+            self.task?.cancel()
+            self.rebuild()
+        }
         task = Task {
             // At most two token scopes, each with two independent section queries.
             await withTaskGroup(of: Void.self) { group in
@@ -182,7 +306,15 @@ final class PullRequestDashboard {
                     }
                 }
             }
-            if self.session == session { task = nil }
+            watchdog?.cancel()
+            watchdog = nil
+            task = nil
+            isRefreshing = false
+            if pendingRefresh && !sleeping {
+                pendingRefresh = false
+                refresh()
+            }
+            reschedule()
         }
     }
 
@@ -191,6 +323,15 @@ final class PullRequestDashboard {
         async let authored: Void = loadSection(id: row.id, account: account, token: token, reviews: false, session: session)
         async let reviews: Void = loadSection(id: row.id, account: account, token: token, reviews: true, session: session)
         _ = await (authored, reviews)
+        guard self.session == session, !Task.isCancelled else { return }
+        if let errors = flightErrors[row.id], !errors.isEmpty {
+            // Authentication wins; otherwise retain the latest server restriction.
+            let failure = errors.first { ($0 as? GitHubAPIError) == .invalidToken || ($0 as? GitHubAPIError) == .forbidden }
+                ?? errors.max { ($0 as? GitHubAPIError)?.retryDeadline ?? .distantPast < ($1 as? GitHubAPIError)?.retryDeadline ?? .distantPast }!
+            syncStates[row.id]?.failed(failure, time: scheduler.clock.now(), date: now(), jitter: jitter())
+        } else {
+            syncStates[row.id] = ConnectionSyncState(succeededAt: scheduler.clock.now())
+        }
     }
 
     private func loadSection(id: UUID, account: GitHubAccount, token: String, reviews isReview: Bool, session: UUID) async {
@@ -198,7 +339,8 @@ final class PullRequestDashboard {
             try Task.checkCancellation()
             let result = try await fetch(account, token, isReview)
             guard self.session == session, !Task.isCancelled else { return }
-            let state = PullRequestSectionState(phase: .loaded, result: result, updatedAt: now())
+            lastSuccessfulRefreshAt = now()
+            let state = PullRequestSectionState(phase: .loaded, result: result, updatedAt: lastSuccessfulRefreshAt)
             if isReview { sources[id]?.reviews = state } else { sources[id]?.authored = state }
         } catch {
             guard self.session == session, !Task.isCancelled, let source = sources[id] else { return }
@@ -208,6 +350,7 @@ final class PullRequestDashboard {
             } else {
                 state.phase = .failed
                 state.errorMessage = Self.message(for: error)
+                flightErrors[id, default: []].append(error)
             }
             if isReview { sources[id]?.reviews = state } else { sources[id]?.authored = state }
         }
@@ -233,6 +376,11 @@ final class PullRequestDashboard {
                                        result: results.isEmpty ? nil : .merged(results),
                                        errorMessage: failures.isEmpty ? nil : entries.count == 1 ? states.first?.errorMessage : failures.joined(separator: "\n"),
                                        updatedAt: states.compactMap(\.updatedAt).min())
+    }
+
+    deinit {
+        task?.cancel()
+        watchdog?.cancel()
     }
 
     private static func message(for error: Error) -> String {

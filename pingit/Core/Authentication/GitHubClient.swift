@@ -1,4 +1,5 @@
 import Foundation
+import CryptoKit
 
 struct GitHubAccount: Codable, Equatable, Sendable {
     var id: Int? = nil
@@ -15,6 +16,7 @@ enum GitHubAPIError: Error, LocalizedError, Equatable {
     case invalidToken
     case forbidden
     case rateLimited
+    case rateLimitedUntil(Date)
     case networkUnavailable
     case unexpectedResponse
     case invalidRequest
@@ -23,13 +25,18 @@ enum GitHubAPIError: Error, LocalizedError, Equatable {
     case partialData
     case missingData
 
+    var retryDeadline: Date? {
+        if case let .rateLimitedUntil(date) = self { return date }
+        return nil
+    }
+
     var errorDescription: String? {
         switch self {
         case .invalidToken:
             "This token is invalid or expired. Create a new token and try again."
         case .forbidden:
             "GitHub denied access. Check your token and account access policies."
-        case .rateLimited:
+        case .rateLimited, .rateLimitedUntil:
             "GitHub’s rate limit was reached. Wait before trying again."
         case .networkUnavailable:
             "Couldn’t reach GitHub. Check your internet connection and try again."
@@ -51,6 +58,7 @@ enum GitHubAPIError: Error, LocalizedError, Equatable {
 
 struct GitHubClient: Sendable {
     private let session: URLSession
+    private let rateGate = RateGate()
 
     init(session: URLSession? = nil) {
         if let session {
@@ -88,7 +96,7 @@ struct GitHubClient: Sendable {
                 || response.value(forHTTPHeaderField: "X-RateLimit-Remaining") == "0"
                 || response.value(forHTTPHeaderField: "Retry-After") != nil
                 || message.contains("rate limit") {
-                throw GitHubAPIError.rateLimited
+                throw rateLimitError(response)
             }
             throw GitHubAPIError.forbidden
         default:
@@ -124,7 +132,7 @@ struct GitHubClient: Sendable {
             let errors = (try? JSONDecoder().decode(GraphQLMetadata.self, from: data))?.errors ?? []
             if response.statusCode == 429 || isRateLimited(response) || message.contains("rate limit")
                 || errors.contains(where: { $0.isRateLimited }) {
-                throw GitHubAPIError.rateLimited
+                throw rateLimitError(response)
             }
             throw GitHubAPIError.forbidden
         default:
@@ -138,7 +146,7 @@ struct GitHubClient: Sendable {
         }
         if let errors = metadata.errors, !errors.isEmpty {
             if isRateLimited(response) || errors.contains(where: { $0.isRateLimited }) {
-                throw GitHubAPIError.rateLimited
+                throw rateLimitError(response)
             }
             if metadata.hasData, let recovered = recoverPartialData?(data) {
                 try Task.checkCancellation()
@@ -170,6 +178,11 @@ struct GitHubClient: Sendable {
 
     private func responseData(for request: URLRequest) async throws -> (Data, HTTPURLResponse) {
         try Task.checkCancellation()
+        // The digest identifies a token's in-memory restrictions without retaining credentials.
+        let fingerprint = SHA256.hash(data: Data((request.value(forHTTPHeaderField: "Authorization") ?? "").utf8))
+            .map { String(format: "%02x", $0) }.joined()
+        try await rateGate.check(fingerprint)
+        try Task.checkCancellation()
         let data: Data
         let response: URLResponse
         do {
@@ -185,8 +198,54 @@ struct GitHubClient: Sendable {
         guard let response = response as? HTTPURLResponse else {
             throw GitHubAPIError.unexpectedResponse
         }
+        let errors = (try? JSONDecoder().decode(GraphQLMetadata.self, from: data))?.errors ?? []
+        let message = (try? JSONDecoder().decode(APIMessage.self, from: data))?.message.lowercased() ?? ""
+        if isRateLimited(response) || response.statusCode == 429 || errors.contains(where: { $0.isRateLimited })
+            || (response.statusCode == 403 && message.contains("rate limit")) {
+            await rateGate.restrict(fingerprint, until: Self.retryDeadline(response) ?? Date().addingTimeInterval(60))
+        }
         try Task.checkCancellation()
         return (data, response)
+    }
+
+    private func rateLimitError(_ response: HTTPURLResponse) -> GitHubAPIError {
+        Self.retryDeadline(response).map { .rateLimitedUntil($0) } ?? .rateLimited
+    }
+
+    static func retryDeadline(_ response: HTTPURLResponse, now: Date = Date()) -> Date? {
+        var deadlines: [Date] = []
+        if let retry = response.value(forHTTPHeaderField: "Retry-After") {
+            if let seconds = Double(retry), seconds.isFinite, seconds >= 0 {
+                deadlines.append(now.addingTimeInterval(seconds))
+            } else {
+                let format = DateFormatter()
+                format.locale = Locale(identifier: "en_US_POSIX")
+                format.timeZone = TimeZone(secondsFromGMT: 0)
+                format.dateFormat = "EEE, dd MMM yyyy HH:mm:ss zzz"
+                if let date = format.date(from: retry) { deadlines.append(date) }
+            }
+        }
+        if response.value(forHTTPHeaderField: "X-RateLimit-Remaining") == "0",
+           let raw = response.value(forHTTPHeaderField: "X-RateLimit-Reset"),
+           let seconds = Double(raw), seconds.isFinite, seconds >= 0 {
+            deadlines.append(Date(timeIntervalSince1970: seconds))
+        }
+        return deadlines.max()
+    }
+
+    private actor RateGate {
+        private var deadlines: [String: (date: Date, instant: ContinuousClock.Instant)] = [:]
+
+        func check(_ fingerprint: String) throws {
+            deadlines = deadlines.filter { $0.value.instant > .now }
+            if let deadline = deadlines[fingerprint] { throw GitHubAPIError.rateLimitedUntil(deadline.date) }
+        }
+
+        func restrict(_ fingerprint: String, until date: Date) {
+            let instant = ContinuousClock.now.advanced(by: .seconds(max(0, date.timeIntervalSinceNow)))
+            if let previous = deadlines[fingerprint], previous.instant >= instant { return }
+            deadlines[fingerprint] = (date, instant)
+        }
     }
 
     private func isRateLimited(_ response: HTTPURLResponse) -> Bool {

@@ -89,6 +89,7 @@ final class BackgroundSyncScheduler {
 struct ConnectionSyncState {
     var succeededAt: TimeInterval?
     var retryAt: TimeInterval?
+    var rateLimitedUntil: TimeInterval?
     var failures = 0
     var requiresAttention = false
 
@@ -106,6 +107,17 @@ struct ConnectionSyncState {
         }
         // Never retry a secondary limit earlier than one minute. Cap transient delay at 30 minutes.
         let delay = min(1800, 60 * pow(2, Double(failures - 1)) * (1 + max(0, min(1, jitter)) * 0.2))
+        if let api = error as? GitHubAPIError {
+            switch api {
+            case .rateLimitedUntil(let deadline):
+                rateLimitedUntil = max(rateLimitedUntil ?? 0, time + max(1, deadline.timeIntervalSince(date)))
+                retryAt = rateLimitedUntil
+                return
+            case .rateLimited:
+                rateLimitedUntil = time + delay
+            default: break
+            }
+        }
         retryAt = max(retryAt ?? 0, time + delay)
     }
 }
