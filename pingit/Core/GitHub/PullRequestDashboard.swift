@@ -54,6 +54,7 @@ final class PullRequestDashboard {
     @ObservationIgnored private var task: Task<Void, Never>?
     @ObservationIgnored private var session = UUID()
     @ObservationIgnored private var lastAttempt: Date?
+    @ObservationIgnored private var hasRequested = false
 
     init(credentials: KeychainCredentialStore = KeychainCredentialStore(),
          discovery: GitHubPullRequestDiscovery = GitHubPullRequestDiscovery()) {
@@ -91,6 +92,7 @@ final class PullRequestDashboard {
         task = nil
         session = UUID()
         connections = rows
+        if rows.isEmpty { hasRequested = false }
         account = rows.compactMap(\.account).first
         sources = Dictionary(uniqueKeysWithValues: rows.map { row in
             let previous = sources[row.id]
@@ -106,10 +108,11 @@ final class PullRequestDashboard {
         })
         lastAttempt = nil
         rebuild()
-        if shouldRefresh { refresh() }
+        if shouldRefresh || hasRequested { refresh() }
     }
 
     func loadIfNeeded() {
+        hasRequested = true
         guard lastAttempt.map({ now().timeIntervalSince($0) >= 60 }) ?? true else { return }
         refresh()
     }
@@ -167,6 +170,7 @@ final class PullRequestDashboard {
 
     private func loadSection(id: UUID, account: GitHubAccount, token: String, reviews isReview: Bool, session: UUID) async {
         do {
+            try Task.checkCancellation()
             let result = try await fetch(account, token, isReview)
             guard self.session == session, !Task.isCancelled else { return }
             let state = PullRequestSectionState(phase: .loaded, result: result, updatedAt: now())

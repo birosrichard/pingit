@@ -146,6 +146,9 @@ struct GitHubPullRequestDiscovery: Sendable {
 extension GitHubPullRequestDiscoveryResult {
     static func merged(_ results: [Self]) -> Self {
         var byID: [String: GitHubPullRequest] = [:]
+        var conflictingDecisions: Set<String> = []
+        var conflictingReviews: Set<String> = []
+        var conflictingRequests: Set<String> = []
         var coverage = results.reduce(into: Set<CoverageLimitation>()) { $0.formUnion($1.coverageLimitations) }
         for result in results {
             for pr in result.pullRequests {
@@ -155,20 +158,36 @@ extension GitHubPullRequestDiscoveryResult {
                 let sameSnapshot = newest.updatedAt == other.updatedAt
                 let decisions = [old.reviewStatus, pr.reviewStatus].compactMap { $0 }.filter { $0 != .unknown }
                 let conflict = Set(decisions.map(\.rawValue)).count > 1
-                if conflict { coverage.insert(.conflictingMetadata) }
-                let status: GitHubReviewStatus? = conflict ? .unknown : sameSnapshot
+                if conflict { conflictingDecisions.insert(pr.id); coverage.insert(.conflictingMetadata) }
+                let status: GitHubReviewStatus? = conflictingDecisions.contains(pr.id) ? .unknown : sameSnapshot
                     ? decisions.first ?? newest.reviewStatus : newest.reviewStatus
-                let reviewsDisagree = sameSnapshot && old.latestReviews != nil && pr.latestReviews != nil
-                    && old.latestReviews != pr.latestReviews
-                if reviewsDisagree { coverage.insert(.conflictingMetadata) }
+                var details = newest.latestReviews ?? (sameSnapshot ? other.latestReviews : nil)
+                if sameSnapshot, let left = newest.latestReviews, let right = other.latestReviews, left != right {
+                    if left.limitations.contains(.unavailable) {
+                        details = right
+                    } else if right.limitations.contains(.unavailable) {
+                        details = left
+                    } else if left.limitations.isEmpty && right.reviews.allSatisfy(left.reviews.contains) {
+                        details = left
+                    } else if right.limitations.isEmpty && left.reviews.allSatisfy(right.reviews.contains) {
+                        details = right
+                    } else {
+                        conflictingReviews.insert(pr.id)
+                        coverage.insert(.conflictingMetadata)
+                    }
+                }
+                let requestsDisagree = sameSnapshot && old.reviewRequests != nil && pr.reviewRequests != nil
+                    && old.reviewRequests != pr.reviewRequests
+                if requestsDisagree { conflictingRequests.insert(pr.id) }
+                if requestsDisagree || (sameSnapshot && old.isDraft != pr.isDraft) { coverage.insert(.conflictingMetadata) }
                 byID[pr.id] = GitHubPullRequest(
                     id: newest.id, number: newest.number, title: newest.title, url: newest.url,
-                    repository: newest.repository, authorLogin: newest.authorLogin ?? other.authorLogin,
-                    isDraft: newest.isDraft, createdAt: newest.createdAt, updatedAt: newest.updatedAt,
+                    repository: newest.repository, authorLogin: newest.authorLogin ?? (sameSnapshot ? other.authorLogin : nil),
+                    isDraft: sameSnapshot ? old.isDraft || pr.isDraft : newest.isDraft, createdAt: newest.createdAt, updatedAt: newest.updatedAt,
                     reviewStatus: status,
-                    latestReviews: reviewsDisagree ? nil : newest.latestReviews ?? (sameSnapshot ? other.latestReviews : nil),
+                    latestReviews: conflictingReviews.contains(pr.id) ? nil : details,
                     checkStatus: newest.checkStatus,
-                    reviewRequests: newest.reviewRequests ?? (sameSnapshot ? other.reviewRequests : nil))
+                    reviewRequests: conflictingRequests.contains(pr.id) ? nil : newest.reviewRequests ?? (sameSnapshot ? other.reviewRequests : nil))
             }
         }
         return Self(pullRequests: byID.values.sorted {

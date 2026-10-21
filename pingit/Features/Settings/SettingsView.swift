@@ -78,11 +78,13 @@ struct GitHubConnectionControls: View {
             } else {
                 TextField("Resource owner (personal username or organization)", text: $owner)
                     .accessibilityIdentifier("github.token.owner")
+                    .disabled(connection.isConnecting)
                 SecureField("Personal access token", text: $token)
                     .textContentType(.password)
                     .focused($isTokenFocused)
                     .onSubmit { connect() }
                     .accessibilityIdentifier("github.token.secret")
+                    .disabled(connection.isConnecting)
                 Text("Resource owner is your label; pingit cannot verify the token’s owner or full repository access.")
                     .font(.caption).foregroundStyle(.secondary)
                 HStack {

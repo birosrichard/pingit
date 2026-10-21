@@ -39,12 +39,17 @@ final class GitHubConnection {
         errorMessage = nil
         defer { isConnecting = false }
         do {
-            snapshot = try metadata.migrate(credentials: credentials)
-            for reference in snapshot.pendingDeletions { try credentials.remove(account: reference) }
-            snapshot.pendingDeletions = []
-            try metadata.save(snapshot)
+            do { snapshot = try metadata.migrate(credentials: credentials) }
+            catch {
+                // A verified replacement may already be usable when only legacy cleanup failed.
+                let saved = try metadata.load()
+                guard !saved.connections.isEmpty else { throw error }
+                snapshot = saved
+                errorMessage = Self.message(error)
+            }
             connections = snapshot.connections
             hasSavedCredential = !connections.isEmpty
+            cleanupCredentials()
             let currentGeneration = generation
             // Validation is bounded to one request; discovery remains independently concurrent.
             for index in connections.indices {
@@ -72,6 +77,10 @@ final class GitHubConnection {
             try metadata.save(snapshot)
             updateDashboard(refresh: false)
         } catch {
+            if let saved = try? metadata.load() {
+                snapshot = saved
+                connections = saved.connections
+            }
             hasSavedCredential = true
             errorMessage = Self.message(error)
         }
@@ -87,6 +96,19 @@ final class GitHubConnection {
         let owner = inputOwner.trimmingCharacters(in: .whitespacesAndNewlines)
         let token = input.trimmingCharacters(in: .whitespacesAndNewlines)
         do {
+            snapshot = try metadata.migrate(credentials: credentials)
+            connections = snapshot.connections
+            hasSavedCredential = !connections.isEmpty
+            // A migrated token without a saved identity must be validated before accepting another identity.
+            for index in connections.indices where connections[index].account == nil && connections[index].id != id {
+                guard let existing = try credentials.load(account: connections[index].storageAccount) else {
+                    throw GitHubAPIError.invalidToken
+                }
+                let identity = try await client.authenticatedAccount(token: existing)
+                try Task.checkCancellation()
+                guard generation == currentGeneration else { return }
+                connections[index].account = identity
+            }
             let validated = try await client.authenticatedAccount(token: token)
             try Task.checkCancellation()
             guard generation == currentGeneration else { return }
@@ -101,9 +123,13 @@ final class GitHubConnection {
                 errorMessage = "A token for this resource owner already exists. Replace that connection instead."
                 return
             }
-            // Establish the migration ledger before adding any credentials.
-            snapshot = try metadata.migrate(credentials: credentials)
             if let id, !connections.contains(where: { $0.id == id }) { return }
+            for existing in connections where existing.id != id {
+                if try credentials.load(account: existing.storageAccount) == token {
+                    errorMessage = "This token is already connected. Replace its existing connection instead."
+                    return
+                }
+            }
             let previous = connections.first(where: { $0.id == id })
             var row = GitHubTokenConnection(id: id ?? UUID(), account: validated, resourceOwner: label,
                                             validatedAt: Date(), status: "Authenticated · owner unverified")
@@ -136,6 +162,7 @@ final class GitHubConnection {
     func remove(_ id: UUID) {
         guard let row = connections.first(where: { $0.id == id }) else { return }
         do {
+            if !snapshot.migrationComplete { snapshot = try metadata.migrate(credentials: credentials) }
             // Record deletion intent first, so interrupted removal is retried on launch.
             var next = snapshot
             next.connections = connections.filter { $0.id != id }
@@ -153,7 +180,7 @@ final class GitHubConnection {
             errorMessage = nil
             updateDashboard(refresh: true)
             cleanupCredentials()
-        } catch { errorMessage = Self.message(error) }
+        } catch { errorMessage = "Couldn’t remove this token from macOS Keychain or connection metadata. Unlock your keychain and retry." }
     }
 
     func disconnect() {
@@ -242,15 +269,34 @@ final class GitHubConnectionMetadata {
 
     func load() throws -> Snapshot {
         guard let defaults, let data = defaults.data(forKey: key) else { return memory }
-        return try JSONDecoder().decode(Snapshot.self, from: data)
+        let snapshot = try JSONDecoder().decode(Snapshot.self, from: data)
+        try validate(snapshot)
+        return snapshot
+    }
+
+    private func validate(_ snapshot: Snapshot) throws {
+        let rows = snapshot.connections
+        let references = Set(rows.map(\.storageAccount))
+        guard Set(rows.map(\.id)).count == rows.count, references.count == rows.count,
+              references.isDisjoint(with: snapshot.pendingDeletions) else {
+            throw KeychainCredentialStore.StorageError.invalidData
+        }
+        let identities = rows.compactMap(\.account)
+        if let first = identities.first {
+            guard identities.allSatisfy({ other in
+                if let lhs = first.id, let rhs = other.id { return lhs == rhs }
+                return first.login.caseInsensitiveCompare(other.login) == .orderedSame
+            }) else { throw KeychainCredentialStore.StorageError.invalidData }
+        }
     }
 
     func save(_ snapshot: Snapshot) throws {
+        try validate(snapshot)
         let data = try JSONEncoder().encode(snapshot)
         if let defaults {
             defaults.set(data, forKey: key)
             // Verify the metadata before a migration is allowed to delete credentials.
-            guard defaults.data(forKey: key) == data else { throw KeychainCredentialStore.StorageError.unavailable }
+            guard defaults.synchronize(), defaults.data(forKey: key) == data else { throw KeychainCredentialStore.StorageError.unavailable }
         }
         memory = snapshot
     }
