@@ -132,3 +132,65 @@ extension GitHubPullRequestTests {
         #expect(pr.compactUpdatedAge(relativeTo: Date(timeIntervalSince1970: seconds)) == expected)
     }
 }
+
+struct PullRequestReviewPresentationTests {
+    private func review(_ state: GitHubPullRequestReview.State, _ login: String? = "reviewer") -> GitHubPullRequestReview {
+        .init(id: login ?? "deleted", authorLogin: login, state: state)
+    }
+    private func display(_ values: [GitHubPullRequestReview], limitations: Set<GitHubLatestReviews.Limitation> = [],
+                         status: GitHubReviewStatus? = .unknown) -> PullRequestReviewPresentation {
+        .init(status: status, reviews: .init(reviews: values, limitations: limitations))
+    }
+
+    @Test func completeEmptyAndUnavailableDiffer() {
+        #expect(display([]).label == "No reviews yet")
+        #expect(display([], limitations: [.reviewerLimit]).label == "No review decision")
+        #expect(display([], limitations: [.unavailable]).label == "No review decision")
+        #expect(PullRequestReviewPresentation(status: nil, reviews: nil).label == "No review decision")
+    }
+
+    @Test func individualApprovalsAreActivityRatherThanOverallApproval() {
+        let bot = display([review(.approved, "macroscopeapp[bot]")])
+        #expect(bot.label == "1 approval")
+        #expect(bot.tone == .neutral)
+        #expect(bot.detail.contains("No authoritative overall review decision"))
+        #expect(bot.detail.contains("does not establish merge readiness"))
+        #expect(display([review(.approved, "alice"), review(.approved, "bob")]).label == "2 approvals")
+        #expect(display([review(.approved, "Alice"), review(.approved, "alice")]).label == "1 approval")
+    }
+
+    @Test func mixedStatesPrioritizeChangesAndExposeActivityDetails() {
+        let result = display([review(.approved, "alice"), review(.changesRequested, "bob")])
+        #expect(result.label == "Changes requested by reviewer")
+        #expect(result.detail.contains("1 approved"))
+        #expect(result.detail.contains("1 changes requested"))
+        #expect(display([review(.changesRequested)]).label == "Changes requested by reviewer")
+        #expect(display([review(.commented)]).label == "Review comments")
+    }
+
+    @Test(arguments: [GitHubPullRequestReview.State.dismissed, .pending, .unknown])
+    func nonApprovalsAreNeverCounted(state: GitHubPullRequestReview.State) {
+        #expect(display([review(state)]).label == "No review decision")
+        #expect(display([review(state)]).tone == .neutral)
+    }
+
+    @Test func incompleteDetailsQualifyVisibleApprovalCounts() {
+        #expect(display([review(.approved)], limitations: [.reviewerLimit]).label == "At least 1 approval")
+        let missing = display([review(.approved, nil)], limitations: [.missingIdentity])
+        #expect(missing.label == "No review decision")
+        #expect(missing.detail.contains("incomplete"))
+    }
+
+    @Test(arguments: [GitHubReviewStatus.approved, .changesRequested, .reviewRequired])
+    func authoritativeDecisionsAlwaysWin(status: GitHubReviewStatus) {
+        let result = display([review(.commented)], limitations: [.reviewerLimit], status: status)
+        let expected: String = switch status {
+        case .approved: "Approved"
+        case .changesRequested: "Changes requested"
+        case .reviewRequired: "Review required"
+        case .unknown: "unused"
+        }
+        #expect(result.label == expected)
+        #expect(result.detail.contains("overall review decision"))
+    }
+}

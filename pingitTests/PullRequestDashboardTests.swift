@@ -76,6 +76,24 @@ struct PullRequestDashboardTests {
         await finish(dashboard)
     }
 
+    @Test func successfulRefreshClearsTransientCoverageWarning() async {
+        let service = ControlledDiscovery()
+        let dashboard = makeDashboard(service)
+        dashboard.setAccount(account)
+        dashboard.refresh()
+        await service.waitForCalls(2)
+        await service.failAll(error: GitHubAPIError.rateLimited)
+        await finish(dashboard)
+        #expect(DiscoveryCoveragePresentation(sections: [dashboard.authored, dashboard.reviews], errors: []).isWarning)
+        dashboard.refresh()
+        await service.waitForCalls(4)
+        await service.resolveAll(result: empty)
+        await finish(dashboard)
+        let display = DiscoveryCoveragePresentation(sections: [dashboard.authored, dashboard.reviews], errors: [])
+        #expect(!display.isWarning)
+        #expect(!display.details.contains("rate limit"))
+    }
+
     @Test func failureDoesNotAutomaticallyRetryOnRapidOpening() async {
         var reads = 0
         let dashboard = PullRequestDashboard(credential: { reads += 1; return "test-token" },
@@ -590,6 +608,37 @@ extension MultiTokenDashboardTests {
 }
 
 extension MultiTokenDashboardTests {
+    @Test func compatibleBoundedReviewsSurviveTokenOrderAndKeepLimitations() throws {
+        let base = pr("same")
+        func observation(_ reviews: [GitHubPullRequestReview], _ limitations: Set<GitHubLatestReviews.Limitation>) -> GitHubPullRequest {
+            GitHubPullRequest(id: base.id, number: base.number, title: base.title, url: base.url,
+                repository: base.repository, authorLogin: base.authorLogin, isDraft: base.isDraft,
+                createdAt: base.createdAt, updatedAt: base.updatedAt, reviewStatus: .unknown,
+                latestReviews: .init(reviews: reviews, limitations: limitations), checkStatus: nil, reviewRequests: nil)
+        }
+        let approval = GitHubPullRequestReview(id: "a", authorLogin: "bot[bot]", state: .approved)
+        let comment = GitHubPullRequestReview(id: "b", authorLogin: "bob", state: .commented)
+        let a = result([observation([approval], [.reviewerLimit])])
+        let b = result([observation([comment], [.missingReview])])
+        for inputs in [[a, b], [b, a], [a, b, a]] {
+            let merged = GitHubPullRequestDiscoveryResult.merged(inputs)
+            let pr = try #require(merged.pullRequests.first)
+            #expect(pr.latestReviews?.reviews == [approval, comment])
+            #expect(pr.latestReviews?.limitations == [.reviewerLimit, .missingReview])
+            #expect(pr.reviewStatus == .unknown)
+            #expect(pr.reviewPresentation.label == "At least 1 approval")
+            #expect(!merged.coverageLimitations.contains(.conflictingMetadata))
+        }
+        let replacement = GitHubPullRequestReview(id: "new", authorLogin: "bot[bot]", state: .dismissed)
+        let conflict = GitHubPullRequestDiscoveryResult.merged([a, result([observation([replacement], [.reviewerLimit])]), a])
+        #expect(conflict.pullRequests.first?.latestReviews == nil)
+        #expect(conflict.coverageLimitations.contains(.conflictingMetadata))
+        let complete = result([observation([approval, comment], [])])
+        for inputs in [[a, complete], [complete, a]] {
+            #expect(GitHubPullRequestDiscoveryResult.merged(inputs).pullRequests.first?.latestReviews?.limitations == [])
+        }
+    }
+
     @Test func completeReviewerDetailsReplaceUnavailableDetailsWithoutInventingConflict() throws {
         let base = pr("same")
         func withDetails(_ details: GitHubLatestReviews) -> GitHubPullRequest {
@@ -663,6 +712,7 @@ struct DiscoveryCoveragePresentationTests {
             let display = DiscoveryCoveragePresentation(sections: sections, errors: [])
             #expect(display.isWarning)
             #expect(display.accessibilityLabel.contains("Acme: Rate limited"))
+            #expect(display.label == "GitHub needs attention")
         }
         #expect(DiscoveryCoveragePresentation(sections: [success], errors: ["Connection failed"]).isWarning)
         let conflict = PullRequestSectionState(result: .init(pullRequests: [], truncationReasons: [],

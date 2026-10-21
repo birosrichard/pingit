@@ -78,6 +78,27 @@ struct GitHubPullRequestDiscoveryTests {
         #expect(pr.reviewStatus == .unknown)
     }
 
+    @Test(arguments: ["macroscopeapp", "macroscopeapp[bot]"])
+    func botApprovalSurvivesDTOAndPresentation(login: String) async throws {
+        var value = node()
+        value["reviewDecision"] = NSNull()
+        value["latestReviews"] = latest([review(author: login)])
+        let pr = try #require(try await authored(MockHTTP(body: payload([value]))).pullRequests.first)
+        #expect(pr.latestReviews?.reviews.first?.authorLogin == login)
+        #expect(pr.reviewStatus == .unknown)
+        #expect(pr.reviewPresentation.label == "1 approval")
+    }
+
+    @Test(arguments: ["COMMENTED", "DISMISSED", "PENDING"])
+    func supersededApprovalsNeverReachFallback(state: String) async throws {
+        var value = node()
+        value["reviews"] = latest([review("old", state: "APPROVED"), review("new", state: state)])
+        value["latestReviews"] = latest([review("new", state: state)])
+        let pr = try #require(try await authored(MockHTTP(body: payload([value]))).pullRequests.first)
+        #expect(pr.reviewPresentation.label == (state == "COMMENTED" ? "Review comments" : "No review decision"))
+        #expect(pr.reviewStatus == .unknown)
+    }
+
     @Test func multipleReviewersDoNotOverrideRepositoryDecision() async throws {
         var value = node()
         value["reviewDecision"] = "REVIEW_REQUIRED"
