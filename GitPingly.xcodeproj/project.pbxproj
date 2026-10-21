@@ -1,0 +1,98 @@
+// !$*UTF8*$!
+{
+    archiveVersion = 1;
+    classes = {};
+    objectVersion = 56;
+    objects = {
+/* Begin PBXBuildFile section */
+        A10000000000000000000001 /* GitPinglyApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000001 /* GitPinglyApp.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+        A20000000000000000000001 /* GitPinglyApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GitPinglyApp.swift; sourceTree = "<group>"; };
+        A20000000000000000000002 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+        A20000000000000000000003 /* GitPingly.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = GitPingly.entitlements; sourceTree = "<group>"; };
+        A20000000000000000000004 /* App.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = App.xcconfig; sourceTree = "<group>"; };
+        A20000000000000000000005 /* GitPingly.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = GitPingly.app; sourceTree = BUILT_PRODUCTS_DIR; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+        A30000000000000000000001 = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+        A40000000000000000000001 = {
+            isa = PBXGroup;
+            children = (A40000000000000000000002 /* GitPingly */, A40000000000000000000005 /* Configuration */, A40000000000000000000006 /* Products */);
+            sourceTree = "<group>";
+        };
+        A40000000000000000000002 /* GitPingly */ = {
+            isa = PBXGroup;
+            children = (A40000000000000000000003 /* App */, A40000000000000000000004 /* Resources */);
+            path = GitPingly;
+            sourceTree = "<group>";
+        };
+        A40000000000000000000003 /* App */ = {isa = PBXGroup; children = (A20000000000000000000001 /* GitPinglyApp.swift */); path = App; sourceTree = "<group>"; };
+        A40000000000000000000004 /* Resources */ = {isa = PBXGroup; children = (A20000000000000000000002 /* Info.plist */, A20000000000000000000003 /* GitPingly.entitlements */); path = Resources; sourceTree = "<group>"; };
+        A40000000000000000000005 /* Configuration */ = {isa = PBXGroup; children = (A20000000000000000000004 /* App.xcconfig */); path = Configuration; sourceTree = "<group>"; };
+        A40000000000000000000006 /* Products */ = {isa = PBXGroup; children = (A20000000000000000000005 /* GitPingly.app */); name = Products; sourceTree = "<group>"; };
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+        A50000000000000000000001 /* GitPingly */ = {
+            isa = PBXNativeTarget;
+            buildConfigurationList = A80000000000000000000002;
+            buildPhases = (A70000000000000000000001 /* Sources */, A30000000000000000000001 /* Frameworks */, A70000000000000000000002 /* Resources */);
+            buildRules = ();
+            dependencies = ();
+            name = GitPingly;
+            productName = GitPingly;
+            productReference = A20000000000000000000005 /* GitPingly.app */;
+            productType = "com.apple.product-type.application";
+        };
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+        A60000000000000000000001 /* Project object */ = {
+            isa = PBXProject;
+            attributes = {
+                BuildIndependentTargetsInParallel = YES;
+                LastSwiftUpdateCheck = 2630;
+                LastUpgradeCheck = 2630;
+                TargetAttributes = {A50000000000000000000001 = {CreatedOnToolsVersion = 26.3; SystemCapabilities = {com.apple.Sandbox = {enabled = 1; }; }; }; };
+            };
+            buildConfigurationList = A80000000000000000000001;
+            compatibilityVersion = "Xcode 14.0";
+            developmentRegion = en;
+            hasScannedForEncodings = 0;
+            knownRegions = (en, Base);
+            mainGroup = A40000000000000000000001;
+            productRefGroup = A40000000000000000000006 /* Products */;
+            projectDirPath = "";
+            projectRoot = "";
+            targets = (A50000000000000000000001 /* GitPingly */);
+        };
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+        A70000000000000000000002 = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+        A70000000000000000000001 = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (A10000000000000000000001 /* GitPinglyApp.swift in Sources */); runOnlyForDeploymentPostprocessing = 0; };
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+        A90000000000000000000001 /* Debug */ = {isa = XCBuildConfiguration; buildSettings = {DEBUG_INFORMATION_FORMAT = dwarf; ENABLE_TESTABILITY = YES; GCC_PREPROCESSOR_DEFINITIONS = ("DEBUG=1", "$(inherited)"); ONLY_ACTIVE_ARCH = YES; SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)"; SWIFT_OPTIMIZATION_LEVEL = "-Onone"; }; name = Debug; };
+        A90000000000000000000002 /* Release */ = {isa = XCBuildConfiguration; buildSettings = {DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym"; SWIFT_COMPILATION_MODE = wholemodule; SWIFT_OPTIMIZATION_LEVEL = "-O"; }; name = Release; };
+        A90000000000000000000003 /* Debug */ = {isa = XCBuildConfiguration; baseConfigurationReference = A20000000000000000000004 /* App.xcconfig */; buildSettings = {}; name = Debug; };
+        A90000000000000000000004 /* Release */ = {isa = XCBuildConfiguration; baseConfigurationReference = A20000000000000000000004 /* App.xcconfig */; buildSettings = {}; name = Release; };
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+        A80000000000000000000001 = {isa = XCConfigurationList; buildConfigurations = (A90000000000000000000001 /* Debug */, A90000000000000000000002 /* Release */); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
+        A80000000000000000000002 = {isa = XCConfigurationList; buildConfigurations = (A90000000000000000000003 /* Debug */, A90000000000000000000004 /* Release */); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
+/* End XCConfigurationList section */
+    };
+    rootObject = A60000000000000000000001 /* Project object */;
+}
