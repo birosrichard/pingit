@@ -11,7 +11,8 @@ struct PingitApp: App {
     }
 
     var body: some Scene {
-        MenuBarExtra("pingit", systemImage: "bell.badge") {
+        MenuBarExtra(connection.account == nil ? "pingit — Not connected" : "pingit — Connected",
+                     systemImage: connection.account == nil ? "bell.slash" : "bell") {
             MenuBarView()
                 .environment(connection)
         }
