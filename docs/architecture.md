@@ -48,9 +48,10 @@ The successful `/user` response proves identity, not repository/organization acc
 Protection Keychain. One generic password item uses the bundle-specific service
 and fixed account name. It is nonsynchronizing and accessible only when unlocked,
 with `ThisDeviceOnly` protection. Duplicate items update atomically; a missing item
-on removal is success. A provisioned app-specific Keychain access group is configured
-through Keychain Sharing. Real credential use requires an Apple development team
-and signing profile; ad hoc UI builds receive a clear signing error. There is no
+on removal is success. The store uses the signed app's default private Keychain group,
+provided by its application identifier. No explicit Keychain Sharing entitlement is
+needed for this single app; restricted groups would prevent ad hoc builds launching.
+Real credential use requires an Apple development team and signing profile; ad hoc UI builds receive a clear signing error. There is no
 legacy Keychain or plaintext fallback. No development team/credentials are committed.
 
 App Sandbox permits outbound networking only. It grants no file access, network
@@ -69,7 +70,8 @@ The unhosted test bundle compiles the same three authentication source files rat
 than launching `PingitApp`; tests cannot trigger startup credential restoration or
 real network requests. Provisioned Keychain access and visual interactions require
 a manual pass with a signed app. Xcode test action entitlement injection is checked
-separately from ordinary Debug/Release product entitlements.
+separately from ordinary Debug/Release product entitlements. A separate launch smoke
+check catches macOS launch-time rejection; static signature checks alone are insufficient.
 
 ## Future boundaries
 
@@ -91,5 +93,6 @@ assets, and packaging remain Phase 8 work.
 - [LSUIElement](https://developer.apple.com/documentation/bundleresources/information-property-list/lsuielement)
 - [App Sandbox](https://developer.apple.com/documentation/security/app-sandbox)
 - [macOS Keychain implementations/signing](https://developer.apple.com/documentation/technotes/tn3137-on-mac-keychains)
+- [Default private Keychain group](https://developer.apple.com/documentation/security/sharing-access-to-keychain-items-among-a-collection-of-apps)
 - [Data Protection Keychain](https://developer.apple.com/documentation/security/ksecusedataprotectionkeychain)
 - [Authenticated GitHub user](https://docs.github.com/en/rest/users/users#get-the-authenticated-user)

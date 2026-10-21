@@ -31,15 +31,19 @@ codesign -d --entitlements :- "$app" > "$entitlements" 2>/dev/null
     || fail "App Sandbox must be enabled"
 [ "$(/usr/libexec/PlistBuddy -c 'Print :com.apple.security.network.client' "$entitlements")" = true ] \
     || fail "Outbound networking must be enabled"
-group=$(/usr/libexec/PlistBuddy -c 'Print :keychain-access-groups:0' "$entitlements")
-case "$group" in
-    "$expected_bundle_id"|*."$expected_bundle_id") ;;
-    *) fail "Missing app-specific Keychain access group" ;;
-esac
-if /usr/libexec/PlistBuddy -c 'Print :keychain-access-groups:1' "$entitlements" >/dev/null 2>&1; then
-    fail "Unexpected shared Keychain access group"
+if /usr/libexec/PlistBuddy -c 'Print :keychain-access-groups' "$entitlements" >/dev/null 2>&1; then
+    [ -f "$app/Contents/embedded.provisionprofile" ] \
+        || fail "Keychain access groups need a provisioning profile; ad hoc builds must omit them"
+    group=$(/usr/libexec/PlistBuddy -c 'Print :keychain-access-groups:0' "$entitlements")
+    case "$group" in
+        *."$expected_bundle_id") ;;
+        *) fail "Unexpected Keychain access group" ;;
+    esac
+    if /usr/libexec/PlistBuddy -c 'Print :keychain-access-groups:1' "$entitlements" >/dev/null 2>&1; then
+        fail "Unexpected shared Keychain access group"
+    fi
 fi
-# Phase 2 needs outbound HTTPS and its own Keychain group, without file/server exceptions.
+# Phase 2 needs outbound HTTPS, without file/server exceptions or unprovisioned sharing.
 if /usr/libexec/PlistBuddy -c Print "$entitlements" | /usr/bin/grep -Eq 'com\.apple\.security\.(network\.server|files\.|temporary-exception\.)'; then
     fail "Unexpected server, file, or temporary-exception entitlement in Phase 2"
 fi
@@ -47,4 +51,4 @@ if /usr/libexec/PlistBuddy -c 'Print :NSAppTransportSecurity' "$info" >/dev/null
     fail "Unexpected App Transport Security override"
 fi
 
-echo "PASS: bundle, agent configuration, version, signature, sandbox, networking, Keychain group, and ATS"
+echo "PASS: bundle, agent configuration, version, signature, sandbox, networking, Keychain entitlement policy, and ATS"

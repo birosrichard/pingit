@@ -19,9 +19,8 @@ review tracking, polling, and notifications are not implemented.
 ## Build and run
 
 Open `pingit.xcodeproj`, select the shared **pingit** scheme and **My Mac**. Under
-Signing & Capabilities, select your development team, keep automatic signing,
-App Sandbox, and Keychain Sharing enabled, then Run (⌘R). The app appears only in
-the menu bar; no main window opens at launch.
+Signing & Capabilities, select your development team, keep automatic signing
+and App Sandbox enabled, then Run (⌘R). The app appears only in the menu bar; no main window opens at launch.
 
 If your shell uses Command Line Tools, select Xcode for these commands:
 
@@ -46,7 +45,7 @@ to connect a real account. Do not add broad entitlements or a plaintext fallback
 
 Bundle identity (`dev.biros.pingit`), version, build number, and minimum macOS
 version live in `Configuration/App.xcconfig`. A bundle-ID override also changes
-the credential service and Keychain group, so it cannot restore the original
+the credential service and default private Keychain group, so it cannot restore the original
 build's credential. Sandbox and hardened runtime remain configured; Xcode disables
 hardened runtime for ad hoc signing. Distribution/notarization is future work.
 
@@ -82,7 +81,8 @@ when you choose. A failed Keychain deletion remains visible and can be retried.
 - Credentials persist exclusively in the macOS Data Protection Keychain, with
   `kSecAttrAccessibleWhenUnlockedThisDeviceOnly` and synchronization disabled.
   The service is `<bundle identifier>.github`, account `personal-access-token`,
-  in the app's provisioned Keychain access group. No shared groups are requested.
+  in the signed app's default private Keychain group. No Keychain Sharing entitlement
+  is requested; Xcode supplies the app identity for provisioned builds.
 - Tokens exist transiently in memory during entry/requests. The input clears on
   submission, successful connection, and closing Settings. Saved tokens are never
   loaded back into the field or retained in the observable UI model.
@@ -126,15 +126,20 @@ xcodebuild -project pingit.xcodeproj -scheme pingit \
   CODE_SIGN_IDENTITY=- CODE_SIGNING_ALLOWED=YES build
 sh scripts/validate-app.sh build/ValidationDebug/Build/Products/Debug/pingit.app
 sh scripts/validate-app.sh build/ValidationRelease/Build/Products/Release/pingit.app
+sh scripts/validate-launch.sh build/ValidationDebug/Build/Products/Debug/pingit.app
+sh scripts/validate-launch.sh build/ValidationRelease/Build/Products/Release/pingit.app
 lipo -archs build/ValidationRelease/Build/Products/Release/pingit.app/Contents/MacOS/pingit
 ```
 
 The script checks the built bundle, signature, sandbox, outbound networking,
-app-specific Keychain group, and absence of file/server/temporary/ATS exceptions.
+Keychain entitlement policy, and absence of file/server/temporary/ATS exceptions.
 Use a normal **build** product for this check: Xcode's **test** action injects
 additional test-runner entitlements. Supply a custom bundle ID as the script's
-second argument if needed. Structural checks do not prove provisioning or live
-Keychain access.
+second argument if needed. The launch check starts a separate process for two
+seconds and then stops only that process; run it from a logged-in macOS desktop session. It catches launch-time
+signature rejection that `codesign --verify` alone misses. Ad hoc builds must omit
+restricted Keychain access groups, since macOS rejects unprovisioned groups before
+app startup. Neither check proves live Keychain access or the visual UI.
 
 Manual checks, using a development-team-signed build and a disposable token:
 

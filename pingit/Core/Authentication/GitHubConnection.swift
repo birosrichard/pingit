@@ -88,7 +88,7 @@ final class GitHubConnection {
 
     private func keychainError(_ error: Error, fallback: String) -> String {
         if let error = error as? KeychainCredentialStore.StorageError, error == .signingRequired {
-            return "This build can’t access Keychain. Select a development team in Xcode with Keychain Sharing enabled, then rebuild."
+            return "This build can’t access Keychain. Select a development team in Xcode for a provisioned signing identity, then rebuild."
         }
         return fallback
     }
