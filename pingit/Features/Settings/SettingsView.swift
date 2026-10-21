@@ -77,6 +77,9 @@ struct SettingsView: View {
         .formStyle(.grouped)
         .frame(width: 520, height: 560)
         .onDisappear { token = "" }
+        .onChange(of: connection.account) { _, account in
+            if account != nil { token = "" }
+        }
     }
 
     private func connect() {

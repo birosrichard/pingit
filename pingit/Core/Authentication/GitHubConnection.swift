@@ -47,14 +47,14 @@ final class GitHubConnection {
                 hasSavedCredential = false
                 errorMessage = GitHubAPIError.invalidToken.localizedDescription
             } catch {
-                errorMessage = "The saved token is invalid, but couldn’t be removed from Keychain. Unlock your keychain and disconnect."
+                errorMessage = keychainError(error, fallback: "The saved token is invalid, but couldn’t be removed from Keychain. Unlock your keychain and disconnect.")
             }
         } catch let error as GitHubAPIError {
             // Offline and rate-limit failures do not invalidate the saved credential.
             errorMessage = error.localizedDescription
         } catch {
             hasSavedCredential = true
-            errorMessage = "Couldn’t read macOS Keychain. Unlock your keychain and retry, or disconnect to remove the saved token."
+            errorMessage = keychainError(error, fallback: "Couldn’t read macOS Keychain. Unlock your keychain and retry, or disconnect to remove the saved token.")
         }
     }
 
@@ -72,7 +72,7 @@ final class GitHubConnection {
             do {
                 try credentials.save(token)
             } catch {
-                errorMessage = "Couldn’t save the token in macOS Keychain. Unlock your keychain and connect again."
+                errorMessage = keychainError(error, fallback: "Couldn’t save the token in macOS Keychain. Unlock your keychain and connect again.")
                 return
             }
             hasSavedCredential = true
@@ -86,6 +86,13 @@ final class GitHubConnection {
         }
     }
 
+    private func keychainError(_ error: Error, fallback: String) -> String {
+        if let error = error as? KeychainCredentialStore.StorageError, error == .signingRequired {
+            return "This build can’t access Keychain. Select a development team in Xcode with Keychain Sharing enabled, then rebuild."
+        }
+        return fallback
+    }
+
     func disconnect() {
         guard !isConnecting else { return }
         do {
@@ -94,7 +101,7 @@ final class GitHubConnection {
             hasSavedCredential = false
             errorMessage = nil
         } catch {
-            errorMessage = "Couldn’t remove the token from macOS Keychain. Unlock your keychain and disconnect again."
+            errorMessage = keychainError(error, fallback: "Couldn’t remove the token from macOS Keychain. Unlock your keychain and disconnect again.")
         }
     }
 }

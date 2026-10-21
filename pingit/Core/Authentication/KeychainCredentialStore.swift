@@ -3,7 +3,8 @@ import Security
 
 @MainActor
 struct KeychainCredentialStore {
-    enum StorageError: Error {
+    enum StorageError: Error, Equatable {
+        case signingRequired
         case unavailable
         case invalidData
     }
@@ -47,7 +48,9 @@ struct KeychainCredentialStore {
         query[kSecMatchLimit as String] = kSecMatchLimitOne
         let (status, result) = operations.read(query as CFDictionary)
         if status == errSecItemNotFound { return nil }
-        guard status == errSecSuccess else { throw StorageError.unavailable }
+        guard status == errSecSuccess else {
+            throw status == errSecMissingEntitlement ? StorageError.signingRequired : StorageError.unavailable
+        }
         guard let data = result as? Data,
               let token = String(data: data, encoding: .utf8), !token.isEmpty else {
             throw StorageError.invalidData
@@ -66,13 +69,15 @@ struct KeychainCredentialStore {
         if status == errSecDuplicateItem {
             status = operations.update(query as CFDictionary, attributes as CFDictionary)
         }
-        guard status == errSecSuccess else { throw StorageError.unavailable }
+        guard status == errSecSuccess else {
+            throw status == errSecMissingEntitlement ? StorageError.signingRequired : StorageError.unavailable
+        }
     }
 
     func remove() throws {
         let status = operations.delete(query as CFDictionary)
         guard status == errSecSuccess || status == errSecItemNotFound else {
-            throw StorageError.unavailable
+            throw status == errSecMissingEntitlement ? StorageError.signingRequired : StorageError.unavailable
         }
     }
 }

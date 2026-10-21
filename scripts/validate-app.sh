@@ -29,9 +29,22 @@ codesign --verify --strict "$app"
 codesign -d --entitlements :- "$app" > "$entitlements" 2>/dev/null
 [ "$(/usr/libexec/PlistBuddy -c 'Print :com.apple.security.app-sandbox' "$entitlements")" = true ] \
     || fail "App Sandbox must be enabled"
-# No network or file access should be granted by the Phase 1 product.
-if /usr/libexec/PlistBuddy -c Print "$entitlements" | /usr/bin/grep -Eq 'com\.apple\.security\.(network\.|files\.)'; then
-    fail "Unexpected network or file entitlement in Phase 1"
+[ "$(/usr/libexec/PlistBuddy -c 'Print :com.apple.security.network.client' "$entitlements")" = true ] \
+    || fail "Outbound networking must be enabled"
+group=$(/usr/libexec/PlistBuddy -c 'Print :keychain-access-groups:0' "$entitlements")
+case "$group" in
+    "$expected_bundle_id"|*."$expected_bundle_id") ;;
+    *) fail "Missing app-specific Keychain access group" ;;
+esac
+if /usr/libexec/PlistBuddy -c 'Print :keychain-access-groups:1' "$entitlements" >/dev/null 2>&1; then
+    fail "Unexpected shared Keychain access group"
+fi
+# Phase 2 needs outbound HTTPS and its own Keychain group, without file/server exceptions.
+if /usr/libexec/PlistBuddy -c Print "$entitlements" | /usr/bin/grep -Eq 'com\.apple\.security\.(network\.server|files\.|temporary-exception\.)'; then
+    fail "Unexpected server, file, or temporary-exception entitlement in Phase 2"
+fi
+if /usr/libexec/PlistBuddy -c 'Print :NSAppTransportSecurity' "$info" >/dev/null 2>&1; then
+    fail "Unexpected App Transport Security override"
 fi
 
-echo "PASS: bundle, agent lifecycle configuration, version, executable, signature, and sandbox"
+echo "PASS: bundle, agent configuration, version, signature, sandbox, networking, Keychain group, and ATS"

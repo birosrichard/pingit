@@ -10,7 +10,7 @@ struct GitHubAccount: Decodable, Equatable, Sendable {
     }
 }
 
-enum GitHubAPIError: Error, LocalizedError {
+enum GitHubAPIError: Error, LocalizedError, Equatable {
     case invalidToken
     case forbidden
     case rateLimited
