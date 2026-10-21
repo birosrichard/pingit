@@ -631,3 +631,43 @@ struct PullRequestInboxTests {
             result: GitHubPullRequestDiscoveryResult(pullRequests: [], truncationReasons: [], coverageLimitations: []))) == "Drafts 0")
     }
 }
+
+struct DiscoveryCoveragePresentationTests {
+    @Test func structuralLimitationsAreInformational() {
+        let state = PullRequestSectionState(phase: .loaded, result: .init(pullRequests: [],
+            truncationReasons: [], coverageLimitations: [.tokenVisibility, .directReviewRequestsOnly]))
+        let display = DiscoveryCoveragePresentation(sections: [state], errors: [])
+        #expect(!display.isWarning)
+        #expect(display.label == "Discovery info")
+        #expect(display.details.contains("Team review requests"))
+        #expect(display.details.contains("visible to your tokens"))
+    }
+
+    @Test(arguments: [GitHubPullRequestDiscoveryResult.TruncationReason.resultLimit,
+                      .pageLimit, .searchLimit, .invalidCursor, .reviewRequestLimit])
+    func truncationIsVisible(reason: GitHubPullRequestDiscoveryResult.TruncationReason) {
+        let state = PullRequestSectionState(phase: .loaded, result: .init(pullRequests: [],
+            truncationReasons: [reason], coverageLimitations: [.tokenVisibility]))
+        let display = DiscoveryCoveragePresentation(sections: [state], errors: [])
+        #expect(display.isWarning)
+        #expect(display.accessibilityLabel.contains("Partial results"))
+        #expect(display.accessibilityLabel.contains("incomplete"))
+        #expect(display.systemImage == "exclamationmark.triangle.fill")
+    }
+
+    @Test func failuresAndConflictsAreVisibleEvenWithoutResults() {
+        let failure = PullRequestSectionState(phase: .failed, errorMessage: "Acme: Rate limited")
+        let success = PullRequestSectionState(phase: .loaded, result: .init(pullRequests: [],
+            truncationReasons: [], coverageLimitations: [.tokenVisibility]))
+        for sections in [[failure], [success, failure]] {
+            let display = DiscoveryCoveragePresentation(sections: sections, errors: [])
+            #expect(display.isWarning)
+            #expect(display.accessibilityLabel.contains("Acme: Rate limited"))
+        }
+        #expect(DiscoveryCoveragePresentation(sections: [success], errors: ["Connection failed"]).isWarning)
+        let conflict = PullRequestSectionState(result: .init(pullRequests: [], truncationReasons: [],
+            coverageLimitations: [.conflictingMetadata]))
+        #expect(DiscoveryCoveragePresentation(sections: [conflict], errors: []).isWarning)
+        #expect(!DiscoveryCoveragePresentation(sections: [success], errors: []).isWarning)
+    }
+}

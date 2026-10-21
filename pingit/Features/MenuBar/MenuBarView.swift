@@ -19,6 +19,10 @@ struct MenuBarView: View {
          dashboard.authored.errorMessage.map { "My PRs and drafts: \($0)" }].compactMap { $0 }
     }
 
+    private var coverage: DiscoveryCoveragePresentation {
+        DiscoveryCoveragePresentation(sections: [dashboard.reviews, dashboard.authored], errors: errors)
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             header
@@ -226,11 +230,11 @@ struct MenuBarView: View {
                     Button {
                         isShowingDetails.toggle()
                     } label: {
-                        Label(errors.isEmpty ? "Limited coverage" : "GitHub needs attention",
-                              systemImage: errors.isEmpty ? "info.circle" : "exclamationmark.triangle.fill")
-                            .foregroundStyle(errors.isEmpty ? Color.secondary : .orange)
+                        Label(coverage.label, systemImage: coverage.systemImage)
+                            .foregroundStyle(coverage.isWarning ? Color.orange : .secondary)
                     }
-                    .help((errors + dashboard.reviews.coverageMessages + dashboard.authored.coverageMessages).joined(separator: "\n"))
+                    .help(coverage.details)
+                    .accessibilityLabel(coverage.accessibilityLabel)
                     .popover(isPresented: $isShowingDetails) { coverageDetails }
                     Spacer(minLength: 4)
                     if let date = state.updatedAt {

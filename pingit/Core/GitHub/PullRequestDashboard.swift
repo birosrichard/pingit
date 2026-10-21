@@ -32,6 +32,26 @@ struct PullRequestSectionState: Equatable {
     }
 }
 
+// Structural scope stays informational; only observed problems raise a warning.
+struct DiscoveryCoveragePresentation {
+    let sections: [PullRequestSectionState]
+    let errors: [String]
+
+    var isWarning: Bool {
+        !errors.isEmpty || sections.contains {
+            $0.errorMessage != nil || $0.result?.isTruncated == true
+                || $0.result?.coverageLimitations.contains(.conflictingMetadata) == true
+        }
+    }
+    var label: String { isWarning ? "Partial results" : "Discovery info" }
+    var systemImage: String { isWarning ? "exclamationmark.triangle.fill" : "info.circle" }
+    var details: String {
+        Array(Set(errors + sections.compactMap(\.errorMessage) + sections.flatMap(\.coverageMessages)))
+            .sorted().joined(separator: "\n")
+    }
+    var accessibilityLabel: String { "\(label). \(details)" }
+}
+
 @MainActor
 @Observable
 final class PullRequestDashboard {
