@@ -37,13 +37,16 @@ struct PullRequestChangeSnapshot: Codable, Equatable, Sendable {
     struct PullRequest: Codable, Equatable, Sendable {
         let repositoryID: String
         let number: Int
+        let updatedAt: Date
         let isDraft: Bool
         let decision: GitHubReviewStatus?
-        let reviewers: [String: Review]?
+        var reviewers: [String: Review]?
+        var reviewsComplete: Bool
 
         init(_ pr: GitHubPullRequest) {
             repositoryID = pr.repository.id
             number = pr.number
+            updatedAt = pr.updatedAt
             isDraft = pr.isDraft
             decision = pr.reviewStatus
             if let details = pr.latestReviews, details.limitations.isEmpty,
@@ -53,6 +56,7 @@ struct PullRequestChangeSnapshot: Codable, Equatable, Sendable {
                     (changeDigest($0.authorLogin!.lowercased()), Review(id: $0.id, state: $0.state))
                 })
             } else { reviewers = nil }
+            reviewsComplete = reviewers != nil
         }
     }
     struct Review: Codable, Equatable, Sendable {
