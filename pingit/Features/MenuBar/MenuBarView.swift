@@ -296,7 +296,7 @@ private struct PullRequestRow: View {
             if let url = pr.browserURL {
                 Link(destination: url) { content }
                     .buttonStyle(.plain)
-                    .help("\(pr.title)\n\(pr.repository.nameWithOwner) #\(pr.number)\nOpen on GitHub")
+                    .help("\(pr.title)\n\(pr.repository.nameWithOwner) #\(pr.number)\n\(showsAuthor ? "Open on GitHub" : pr.reviewPresentation.detail)")
             } else {
                 content.help("This pull request has an invalid GitHub URL.")
             }
@@ -346,6 +346,15 @@ private struct PullRequestRow: View {
                     in: RoundedRectangle(cornerRadius: 6))
     }
 
+    private func reviewColor(_ tone: PullRequestReviewPresentation.Tone) -> Color {
+        switch tone {
+        case .neutral: .secondary
+        case .positive: .green
+        case .caution: .orange
+        case .negative: .red
+        }
+    }
+
     @ViewBuilder private var metadata: some View {
         if pr.isDraft {
             Label("Draft", systemImage: "pencil.circle").foregroundStyle(.secondary)
@@ -354,16 +363,11 @@ private struct PullRequestRow: View {
             Text(pr.authorLogin.map { "@\($0)" } ?? "Author unavailable")
                 .foregroundStyle(.secondary).lineLimit(1)
         } else {
-            switch pr.reviewStatus {
-            case .approved:
-                Label("Approved", systemImage: "checkmark.circle.fill").foregroundStyle(.green)
-            case .changesRequested:
-                Label("Changes requested", systemImage: "exclamationmark.bubble.fill").foregroundStyle(.red)
-            case .reviewRequired:
-                Label("Review pending", systemImage: "clock").foregroundStyle(.orange)
-            case .unknown, nil:
-                Label("Review unknown", systemImage: "questionmark.circle").foregroundStyle(.secondary)
-            }
+            let display = pr.reviewPresentation
+            Label(display.label, systemImage: display.systemImage)
+                .foregroundStyle(reviewColor(display.tone))
+                .help(display.detail)
+                .accessibilityLabel("\(display.label). \(display.detail)")
         }
         // CI is independent of the review decision; nil means it was not fetched.
         switch pr.checkStatus {

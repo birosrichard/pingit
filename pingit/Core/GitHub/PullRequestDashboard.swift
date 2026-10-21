@@ -43,10 +43,14 @@ struct DiscoveryCoveragePresentation {
                 || $0.result?.coverageLimitations.contains(.conflictingMetadata) == true
         }
     }
-    var label: String { isWarning ? "Partial results" : "Discovery info" }
+    var label: String {
+        if !errors.isEmpty || sections.contains(where: { $0.errorMessage != nil }) { return "GitHub needs attention" }
+        return isWarning ? "Partial results" : "Discovery info"
+    }
     var systemImage: String { isWarning ? "exclamationmark.triangle.fill" : "info.circle" }
     var details: String {
-        Array(Set(errors + sections.compactMap(\.errorMessage) + sections.flatMap(\.coverageMessages)))
+        let failures = errors.isEmpty ? sections.compactMap(\.errorMessage) : errors
+        return Array(Set(failures + sections.flatMap(\.coverageMessages)))
             .sorted().joined(separator: "\n")
     }
     var accessibilityLabel: String { "\(label). \(details)" }

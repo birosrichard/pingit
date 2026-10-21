@@ -171,6 +171,16 @@ extension GitHubPullRequestDiscoveryResult {
                         details = left
                     } else if right.limitations.isEmpty && left.reviews.allSatisfy(right.reviews.contains) {
                         details = right
+                    } else if !left.limitations.isEmpty && !right.limitations.isEmpty,
+                              !left.reviews.contains(where: { a in right.reviews.contains { b in
+                                  (a.id == b.id || (a.authorLogin != nil &&
+                                      a.authorLogin?.lowercased() == b.authorLogin?.lowercased())) && a != b
+                              } }) {
+                        // Compatible bounded observations can add evidence, never prove completeness.
+                        let combined = Array(Set(left.reviews.map(\.id) + right.reviews.map(\.id))).sorted()
+                        details = GitHubLatestReviews(reviews: combined.compactMap { id in
+                            left.reviews.first { $0.id == id } ?? right.reviews.first { $0.id == id }
+                        }, limitations: left.limitations.union(right.limitations))
                     } else {
                         conflictingReviews.insert(pr.id)
                         coverage.insert(.conflictingMetadata)

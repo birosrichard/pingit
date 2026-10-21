@@ -111,3 +111,68 @@ extension GitHubPullRequest {
         return "\(Int(seconds / 86_400))d"
     }
 }
+
+// A row summary never changes the authoritative GitHub decision.
+struct PullRequestReviewPresentation: Equatable {
+    enum Tone { case neutral, positive, caution, negative }
+    let label: String
+    let systemImage: String
+    let tone: Tone
+    let detail: String
+
+    init(status: GitHubReviewStatus?, reviews: GitHubLatestReviews?) {
+        switch status {
+        case .approved:
+            label = "Approved"; systemImage = "checkmark.circle.fill"; tone = .positive
+        case .changesRequested:
+            label = "Changes requested"; systemImage = "exclamationmark.bubble.fill"; tone = .negative
+        case .reviewRequired:
+            label = "Review required"; systemImage = "clock"; tone = .caution
+        case .unknown, nil:
+            // Count only identifiable latest submissions; deleted identities remain in the domain.
+            let known = reviews?.reviews.filter { $0.authorLogin?.isEmpty == false } ?? []
+            let approvals = Set(known.filter { $0.state == .approved }.compactMap { $0.authorLogin?.lowercased() }).count
+            let changes = known.contains { $0.state == .changesRequested }
+            let partial = reviews?.limitations.isEmpty != true
+            if changes {
+                label = "Changes requested by reviewer"
+                systemImage = "exclamationmark.bubble"; tone = .caution
+            } else if approvals > 0 {
+                label = "\(partial ? "At least " : "")\(approvals) \(approvals == 1 ? "approval" : "approvals")"
+                systemImage = "checkmark.bubble"; tone = .neutral
+            } else if known.contains(where: { $0.state == .commented }) {
+                label = "Review comments"; systemImage = "text.bubble"; tone = .neutral
+            } else if reviews?.reviews.isEmpty == true && !partial {
+                label = "No reviews yet"; systemImage = "bubble"; tone = .neutral
+            } else {
+                label = "No review decision"; systemImage = "minus.circle"; tone = .neutral
+            }
+        }
+        let authoritative = status != nil && status != .unknown
+        var explanation = authoritative ? "GitHub’s overall review decision."
+            : "No authoritative overall review decision is available. This summarizes available latest reviewer activity."
+        if let reviews {
+            let counts = Dictionary(grouping: reviews.reviews, by: \.state)
+            let activity = counts.keys.sorted { $0.rawValue < $1.rawValue }.map {
+                let name: String = switch $0 {
+                case .approved: "approved"
+                case .changesRequested: "changes requested"
+                case .commented: "commented"
+                case .dismissed: "dismissed"
+                case .pending: "pending"
+                case .unknown: "unknown state"
+                }
+                return "\(counts[$0]?.count ?? 0) \(name)"
+            }.joined(separator: ", ")
+            if !activity.isEmpty { explanation += " Latest reviews: \(activity)." }
+        }
+        if reviews?.limitations.isEmpty != true { explanation += " Review details are incomplete or unavailable." }
+        detail = explanation + " This does not establish merge readiness."
+    }
+}
+
+extension GitHubPullRequest {
+    var reviewPresentation: PullRequestReviewPresentation {
+        PullRequestReviewPresentation(status: reviewStatus, reviews: latestReviews)
+    }
+}
