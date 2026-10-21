@@ -19,6 +19,8 @@
         A10000000000000000000003 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000007 /* SettingsView.swift */; };
         A10000000000000000000002 /* MenuBarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000006 /* MenuBarView.swift */; };
         A10000000000000000000001 /* PingitApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000001 /* PingitApp.swift */; };
+        D10000000000000000000001 /* GitHubPullRequest.swift in Sources */ = {isa = PBXBuildFile; fileRef = D20000000000000000000001; };
+        D10000000000000000000002 /* GitHubPullRequest.swift in Sources */ = {isa = PBXBuildFile; fileRef = D20000000000000000000001; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -38,6 +40,7 @@
         A20000000000000000000003 /* pingit.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = pingit.entitlements; sourceTree = "<group>"; };
         A20000000000000000000004 /* App.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = App.xcconfig; sourceTree = "<group>"; };
         A20000000000000000000005 /* pingit.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = pingit.app; sourceTree = BUILT_PRODUCTS_DIR; };
+        D20000000000000000000001 /* GitHubPullRequest.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GitHub/GitHubPullRequest.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -47,7 +50,7 @@
 
 /* Begin PBXGroup section */
         C40000000000000000000001 /* pingitTests */ = {isa = PBXGroup; children = (C20000000000000000000001, C20000000000000000000002, C20000000000000000000003, C20000000000000000000004); path = pingitTests; sourceTree = "<group>"; };
-        B40000000000000000000001 /* Core */ = {isa = PBXGroup; children = (B40000000000000000000002); path = Core; sourceTree = "<group>"; };
+        B40000000000000000000001 /* Core */ = {isa = PBXGroup; children = (D20000000000000000000001, B40000000000000000000002); path = Core; sourceTree = "<group>"; };
         B40000000000000000000002 /* Authentication */ = {isa = PBXGroup; children = (B20000000000000000000001, B20000000000000000000002, B20000000000000000000003); path = Authentication; sourceTree = "<group>"; };
         A40000000000000000000009 /* Settings */ = {isa = PBXGroup; children = (A20000000000000000000007 /* SettingsView.swift */, B20000000000000000000004); path = Settings; sourceTree = "<group>"; };
         A40000000000000000000007 /* Features */ = {isa = PBXGroup; children = (A40000000000000000000008 /* MenuBar */, A40000000000000000000009 /* Settings */); path = Features; sourceTree = "<group>"; };
@@ -121,8 +124,8 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
-        C70000000000000000000001 = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (C10000000000000000000001, C10000000000000000000002, C10000000000000000000003, C10000000000000000000004, C10000000000000000000011, C10000000000000000000012, C10000000000000000000013); runOnlyForDeploymentPostprocessing = 0; };
-        A70000000000000000000001 = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (B10000000000000000000004, B10000000000000000000003, B10000000000000000000002, B10000000000000000000001, A10000000000000000000001 /* PingitApp.swift in Sources */, A10000000000000000000002 /* MenuBarView.swift in Sources */, A10000000000000000000003 /* SettingsView.swift in Sources */); runOnlyForDeploymentPostprocessing = 0; };
+        C70000000000000000000001 = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (D10000000000000000000002, C10000000000000000000001, C10000000000000000000002, C10000000000000000000003, C10000000000000000000004, C10000000000000000000011, C10000000000000000000012, C10000000000000000000013); runOnlyForDeploymentPostprocessing = 0; };
+        A70000000000000000000001 = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (D10000000000000000000001, B10000000000000000000004, B10000000000000000000003, B10000000000000000000002, B10000000000000000000001, A10000000000000000000001 /* PingitApp.swift in Sources */, A10000000000000000000002 /* MenuBarView.swift in Sources */, A10000000000000000000003 /* SettingsView.swift in Sources */); runOnlyForDeploymentPostprocessing = 0; };
 /* End PBXSourcesBuildPhase section */
 
 /* Begin XCBuildConfiguration section */
