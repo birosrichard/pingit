@@ -1,8 +1,9 @@
 # Development roadmap
 
-Phases 1–3F, 4A (CI/diff metadata), 4B (native dashboard refinement), and
-[4C (final dashboard polish)](phase-4c.md) are implemented.
-Further activity, background updates and distribution work remain separately scoped.
+Phases 1–3F, 4A (CI/diff metadata), 4B (native dashboard refinement),
+[4C (final dashboard polish)](phase-4c.md), and [5A (background sync)](phase-5a.md)
+are implemented. Further activity, change detection, notifications and distribution
+remain separately scoped.
 Keep each phase independently buildable and validate before moving on.
 
 ## 1. Project foundation
@@ -118,9 +119,18 @@ Keep each phase independently buildable and validate before moving on.
 - Acceptance: multiple checks and missing data are represented accurately;
   transitions and links to failed checks are verified against real GitHub data.
 
-## 6. Background updates and native notifications
+## 5A. Reliable background synchronization — implemented
 
-- Add cancellable, rate-aware polling and opt-in macOS notifications.
+- App-owned monotonic scheduling, five-minute default, native persisted preferences.
+- Shared single-flight refresh, per-token rate deadlines/backoff and retained stale results.
+- Sleep/wake evaluation, cancellation/stale-response protection and clean shutdown.
+- Deterministic clock tests, signed arm64 Debug validation and launch smoke test.
+- See [implementation, validation and limitations](phase-5a.md). No change detection,
+  notifications or PR history are included.
+
+## 6. Change detection and native notifications — future scope
+
+- Compare refreshed data for meaningful changes and add opt-in macOS notifications.
 - Acceptance: only meaningful new events notify; repeated polls do not duplicate
   alerts; sleep/wake, offline recovery, permission denial, and quit behave cleanly.
 

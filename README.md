@@ -3,7 +3,7 @@
 A lightweight, native macOS menu bar app for GitHub activity. The goal is to show
 pull requests, reviews, comments, and CI updates that need your attention.
 
-**Current status: Phase 4C — Final Dashboard UI/UX Polish.**
+**Current status: Phase 5A — Reliable Background Sync.**
 Connect one GitHub.com identity with multiple tokens stored independently in macOS
 Keychain. Review / My PRs / Drafts show clearer native PR rows, repository/owner
 identity, independent review context and compact file/addition/deletion totals.
@@ -17,7 +17,12 @@ outside the scrolling list, and retains manual Refresh/⌘R and the 60-second on
 freshness policy. Rows sit directly on the dashboard surface; native scrollbars
 have a separate content inset, counts use subtle badges, and drafts do not prompt
 for normal review. Submitted reviews and GitHub's authoritative data remain intact.
-No background polling or notifications. See [Phase 4C polish and validation](docs/phase-4c.md),
+Background sync runs while the app is open, even with the popover closed, every
+5 minutes by default. **Settings → Background Sync** can disable it or select
+2, 5, 10, 15 or 30 minutes. Manual refresh remains available. Token-specific retry
+restrictions protect rate limits and preserve stale results on failure. No
+notifications are generated, and no private PR history is persisted. See [background sync and validation](docs/phase-5a.md),
+[Phase 4C polish and validation](docs/phase-4c.md),
 [Phase 4B design and validation](docs/phase-4b.md),
 [review semantics](docs/reviews.md), [retained CI implementation](docs/checks.md), and
 [discovery limitations](docs/discovery.md).
@@ -25,7 +30,7 @@ No background polling or notifications. See [Phase 4C polish and validation](doc
 ## Requirements
 
 - macOS 14 or later; Apple Silicon and Intel
-- Xcode 16 or later with Swift 6; Phase 4B validated with Xcode 27.1 / Swift 6.4
+- Xcode 16 or later with Swift 6; Phase 5A validated with Xcode 27.1 / Swift 6.4
 - A valid Apple Development signing identity and provisioning profile for real
   Keychain access (choose your development team in Xcode; no team is committed)
 
@@ -117,7 +122,8 @@ See [multi-token storage, merge policy, validation and manual checks](docs/token
 - The API uses an ephemeral URLSession with disk cache, credential storage, and
   cookie acceptance disabled. Requests use a fixed HTTPS endpoint and reject
   redirects. Avatars load separately over HTTPS without an Authorization header.
-- UserDefaults stores non-secret connection metadata and migration/deletion bookkeeping only.
+- UserDefaults stores non-secret connection metadata, migration/deletion bookkeeping,
+  and sync preferences only.
   No token values, private PR content, token logs, Authorization logging,
   analytics, embedded secrets, external dependencies, or ATS exceptions.
 - Only outbound networking is allowed. Keychain access relies on signing and its

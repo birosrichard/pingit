@@ -1,3 +1,12 @@
+> Phase 5A now refreshes this same in-memory dashboard from an app-owned scheduler,
+> even with the popover closed. Default: five minutes, configurable/disableable in
+> Settings. Opening keeps the 60-second freshness rule; manual/automatic requests
+> share a single flight and honor per-token rate restrictions. Failed sources keep
+> their own old timestamps and results; the footer’s conservative oldest timestamp
+> and Previous results label remain meaningful. Settings shows Last data received,
+> which may represent partial success. See [current synchronization policy and
+> validation](phase-5a.md). Earlier no-polling statements below are historical.
+
 > Current Phase 4B: a single native row component combines review/author context
 > and diff totals, with clearer typography, owner identity and measured list sizing.
 > Default rows and their tooltips/VoiceOver hide all CI states. CI unavailability

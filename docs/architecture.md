@@ -15,9 +15,11 @@ and no external dependencies.
 
 ## Scenes and connection lifetime
 
-`PingitApp` owns one `@State` instance of `GitHubConnection`, starts a single startup
-restoration task independently of either view appearing, and injects the same
-observable object into the window-style `MenuBarExtra` and native `Settings` scene.
+`PingitAppDelegate` owns one `GitHubConnection`. At launch it starts the dashboard
+scheduler and one credential-restoration task, independently of either view appearing.
+`PingitApp` injects that same observable connection into the window-style
+`MenuBarExtra` and native `Settings` scene. The delegate observes workspace sleep/wake
+and cancels owned work/removes observers on termination.
 There is no `WindowGroup`. `LSUIElement` avoids a persistent Dock icon/main window.
 
 `GitHubConnection` is `@MainActor` and `@Observable`, owning the connection list
@@ -37,7 +39,8 @@ preserves the current UI session for retry. Duplicate validations are blocked.
 Replace and confirmed Remove actions. The add flow holds an unsaved secure token draft,
 clears it before submission/disappearance, and never reloads saved credentials into
 views. Settings and the disconnected popover share these controls. Menu bar Settings,
-Refresh (⌘R), and Quit actions remain on the main actor. No polling/retry loop is added.
+Refresh (⌘R), and Quit actions remain on the main actor. Background scheduling is
+independent of both views; see [Phase 5A](phase-5a.md).
 
 ## API and credential boundaries
 
@@ -53,7 +56,8 @@ The successful `/user` response proves identity, not repository/organization acc
 session, header validation, and sanitized transport handling as account validation.
 Callers supply the existing Keychain token per request; the client retains no token
 and does not own credential storage or invalidation. Variables are `Encodable & Sendable` and
-response data is `Decodable & Sendable`. The dashboard state layer invokes discovery on opening/refresh.
+response data is `Decodable & Sendable`. The dashboard state layer invokes discovery
+on opening, manual refresh and scheduled sync.
 
 GraphQL errors are inspected before typed data decoding. Responses containing both
 non-null data and errors throw `partialData`; partial results are deliberately not
@@ -64,8 +68,12 @@ response with zero remaining quota still returns its data. HTTP 401, 403, 429 an
 other statuses remain distinct from malformed JSON/schema failures. No server
 message, raw decoding error, or transport error is exposed. Cancellation is checked
 before transport and after it, and URLSession cancellation remains CancellationError.
-The transport has no retry, pagination, or generic networking framework; discovery
-owns its bounded search pagination.
+The transport never retries internally; discovery owns bounded search pagination.
+A shared per-token rate gate retains only token digests and monotonic restriction
+deadlines in memory. It stops later pages after a limit (including a successful last
+quota response), while another token can continue. Reliable server deadlines travel
+in sanitized errors to the dashboard coordinator. Headerless secondary limits retain
+their distinct error so the coordinator applies exponential backoff.
 
 Domain models contain repository/PR identity, display metadata, optional review/check
 status, and user/team review requests. Missing status/requests mean unavailable or
@@ -130,17 +138,25 @@ Aggregated lists merge by PR node ID separately within each section; conflicts r
 unknown and warn about incomplete metadata. Removal immediately recomputes the union
 from remaining sources; replacement drops its old source cache. Generation and
 cancellation checks reject stale responses. Opening uses the existing 60-second
-freshness threshold; explicit refresh and connection changes bypass it. If the
+freshness threshold; explicit refresh and connection changes bypass it while still
+respecting per-token rate restrictions. Requests coalesce into the active flight;
+identity changes invalidate/cancel it and queue one follow-up after workers drain.
+A two-minute watchdog bounds the production cancellation-aware refresh pipeline.
+Per-token success completion sets its next interval deadline; failures set independent
+retry deadlines. One event-driven `ContinuousClock` sleeper selects the earliest
+eligible token, with no catch-up bursts. Manual and popover loads reset those same
+deadlines. Sleep cancels active discovery and the deadline; wake reevaluates staleness
+and restrictions. Native Settings persist only enabled/interval preferences. If the
 popover opens during restore, discovery starts when connections arrive. A full
 disconnect clears results and starts the next session idle. No private PR data is
 persisted. See [merge/lifecycle policy](tokens.md) and [dashboard](dashboard.md).
 
 ## Future boundaries
 
-Phases 1, 2, 3A, 3B, 3C, 3D and 3E are implemented. Successful account validation
-must never imply complete repository access. Polling and notifications belong
-outside view lifetimes and must stop on disconnect/quit. Preferences, repository
-selection, multiple accounts, OAuth, and packaging are out of this phase.
+Phases through 4C and [5A background sync](phase-5a.md) are implemented. Successful
+account validation must never imply complete repository access. Synchronization
+stops on disconnect/quit and can be disabled. Change detection, notifications,
+repository selection, multiple accounts, OAuth and packaging require separate scope.
 
 Work stays on `main` in small local commits. Distribution, notarization, store
 assets, and packaging remain Phase 8 work.
