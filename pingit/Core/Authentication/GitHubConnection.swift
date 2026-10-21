@@ -4,6 +4,7 @@ import Observation
 @MainActor
 @Observable
 final class GitHubConnection {
+    let dashboard: PullRequestDashboard
     private(set) var account: GitHubAccount?
     private(set) var isConnecting = false
     private(set) var hasSavedCredential = false
@@ -16,6 +17,7 @@ final class GitHubConnection {
     init(client: GitHubClient = GitHubClient(), credentials: KeychainCredentialStore = KeychainCredentialStore()) {
         self.client = client
         self.credentials = credentials
+        dashboard = PullRequestDashboard(credentials: credentials, discovery: GitHubPullRequestDiscovery(client: client))
     }
 
     func restore() async {
@@ -39,6 +41,7 @@ final class GitHubConnection {
             let account = try await client.authenticatedAccount(token: token)
             try Task.checkCancellation()
             self.account = account
+            dashboard.setAccount(account)
         } catch is CancellationError {
             // Retain the saved credential for an explicit retry after cancellation.
         } catch GitHubAPIError.invalidToken {
@@ -77,6 +80,7 @@ final class GitHubConnection {
             }
             hasSavedCredential = true
             self.account = account
+            dashboard.setAccount(account)
         } catch is CancellationError {
             // A cancelled attempt must not save credentials or display an error.
         } catch let error as GitHubAPIError {
@@ -98,6 +102,7 @@ final class GitHubConnection {
         do {
             try credentials.remove()
             account = nil
+            dashboard.setAccount(nil)
             hasSavedCredential = false
             errorMessage = nil
         } catch {
