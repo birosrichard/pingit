@@ -24,7 +24,7 @@ struct GitHubPullRequestDiscoveryTests {
         #expect(!request.variables.includeReviewRequests)
         #expect(request.query.contains("type: ISSUE"))
         #expect(request.query.contains("createdAt updatedAt"))
-        #expect(!request.query.contains("reviewDecision"))
+        #expect(request.query.contains("reviewDecision"))
         #expect(!request.query.contains("statusCheckRollup"))
         let pr = try #require(result.pullRequests.first)
         #expect(pr.id == "PR_1")
@@ -37,9 +37,23 @@ struct GitHubPullRequestDiscoveryTests {
         #expect(pr.isDraft)
         #expect(pr.createdAt == Date(timeIntervalSince1970: 1_792_486_800))
         #expect(pr.updatedAt == Date(timeIntervalSince1970: 1_792_573_200))
-        #expect(pr.reviewStatus == nil && pr.checkStatus == nil && pr.reviewRequests == nil)
+        #expect(pr.reviewStatus == .unknown && pr.checkStatus == nil && pr.reviewRequests == nil)
         #expect(!result.isTruncated)
         #expect(result.coverageLimitations == [.tokenVisibility])
+    }
+
+    @Test(arguments: ["APPROVED", "CHANGES_REQUESTED", "REVIEW_REQUIRED", "UNSUPPORTED", "", nil] as [String?])
+    func mapsAuthoritativeReviewDecision(decision: String?) async throws {
+        var value = node()
+        value["reviewDecision"] = decision as Any? ?? NSNull()
+        let result = try await authored(MockHTTP(body: try payload([value])))
+        let expected: GitHubReviewStatus = switch decision {
+        case "APPROVED": .approved
+        case "CHANGES_REQUESTED": .changesRequested
+        case "REVIEW_REQUIRED": .reviewRequired
+        default: .unknown
+        }
+        #expect(result.pullRequests.first?.reviewStatus == expected)
     }
 
     @Test func usesValidatedAccountRatherThanHardcodedLogin() async throws {

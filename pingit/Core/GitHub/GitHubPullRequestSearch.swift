@@ -30,6 +30,7 @@ struct GitHubPullRequestSearchResponse: Decodable, Sendable {
         let isDraft: Bool
         let createdAt: String
         let updatedAt: String
+        let reviewDecision: String?
         let reviewRequests: ReviewRequests?
 
         enum State: String, Decodable, Sendable { case open = "OPEN", closed = "CLOSED", merged = "MERGED" }
@@ -48,9 +49,18 @@ struct GitHubPullRequestSearchResponse: Decodable, Sendable {
                 repository: GitHubRepository(id: repository.id, nameWithOwner: repository.nameWithOwner, url: repository.url),
                 authorLogin: author?.login, isDraft: isDraft,
                 createdAt: try Self.date(createdAt), updatedAt: try Self.date(updatedAt),
-                reviewStatus: nil, checkStatus: nil,
+                reviewStatus: overallReviewStatus, checkStatus: nil,
                 reviewRequests: reviewRequests?.pageInfo.hasNextPage == true ? nil : requests
             )
+        }
+
+        private var overallReviewStatus: GitHubReviewStatus {
+            switch reviewDecision {
+            case "APPROVED": .approved
+            case "CHANGES_REQUESTED": .changesRequested
+            case "REVIEW_REQUIRED": .reviewRequired
+            default: .unknown
+            }
         }
 
         private static func date(_ value: String) throws -> Date {
@@ -118,6 +128,7 @@ struct GitHubPullRequestSearchResponse: Decodable, Sendable {
           __typename
           ... on PullRequest {
             id number title url state isDraft createdAt updatedAt
+            reviewDecision
             author { login }
             repository { id nameWithOwner url }
             reviewRequests(first: 100) @include(if: $includeReviewRequests) {

@@ -28,6 +28,7 @@ enum GitHubReviewStatus: String, Codable, Sendable {
     case reviewRequired
     case approved
     case changesRequested
+    case unknown
 }
 
 enum GitHubCheckStatus: String, Codable, Sendable {

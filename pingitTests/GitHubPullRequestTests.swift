@@ -47,7 +47,7 @@ struct GitHubPullRequestTests {
         #expect(loaded.reviewRequests == [])
     }
 
-    @Test(arguments: ["reviewRequired", "approved", "changesRequested"])
+    @Test(arguments: ["reviewRequired", "approved", "changesRequested", "unknown"])
     func decodesReviewStatus(value: String) throws {
         let status = try JSONDecoder().decode(GitHubReviewStatus.self, from: Data("\"\(value)\"".utf8))
         #expect(status.rawValue == value)
