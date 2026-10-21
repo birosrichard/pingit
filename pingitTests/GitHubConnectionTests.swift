@@ -443,7 +443,7 @@ extension MultiTokenAuthenticationTests {
 }
 
 // Used only on the main actor; model the ambiguous failure after UserDefaults.set succeeds.
-private final class FailingSyncDefaults: UserDefaults, @unchecked Sendable {
+private final class FailingSyncDefaults: UserDefaults {
     var failSync = false
     override func synchronize() -> Bool { failSync ? false : super.synchronize() }
 }

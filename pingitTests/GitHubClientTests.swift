@@ -46,8 +46,16 @@ struct GitHubClientTests {
     @Test(arguments: [true, false]) func secondaryRateLimit(withRetryHeader: Bool) async {
         let http = MockHTTP(status: 403, body: #"{"message":"You have exceeded a secondary rate limit."}"#,
                             headers: withRetryHeader ? ["Retry-After": "60"] : [:])
-        await #expect(throws: GitHubAPIError.rateLimited) {
-            try await http.client.authenticatedAccount(token: "test-token")
+        do {
+            _ = try await http.client.authenticatedAccount(token: "test-token")
+            Issue.record("Expected rate limit")
+        } catch {
+            let api = error as? GitHubAPIError
+            if withRetryHeader {
+                #expect((api?.retryDeadline?.timeIntervalSinceNow ?? 0) > 55)
+            } else {
+                #expect(api == .rateLimited)
+            }
         }
     }
 

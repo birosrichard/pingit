@@ -93,7 +93,14 @@ struct GitHubGraphQLTests {
     @Test(arguments: [200, 403]) func secondaryRateLimits(status: Int) async {
         let http = MockHTTP(status: status, body: #"{"errors":[{"message":"Limit reached"}]}"#,
                             headers: ["Retry-After": "60"])
-        await #expect(throws: GitHubAPIError.rateLimited) { try await execute(http) }
+        do {
+            _ = try await execute(http)
+            Issue.record("Expected a rate limit deadline")
+        } catch {
+            let deadline = (error as? GitHubAPIError)?.retryDeadline
+            #expect(deadline != nil)
+            #expect((deadline?.timeIntervalSinceNow ?? 0) > 55)
+        }
     }
 
     @Test(arguments: [
@@ -179,5 +186,85 @@ private extension Data {
             if count == 0 { return }
             append(buffer, count: count)
         }
+    }
+}
+
+extension GitHubGraphQLTests {
+    @Test func retryHeadersChooseTheLatestReliableDeadline() throws {
+        let now = Date(timeIntervalSince1970: 1000)
+        func response(_ headers: [String: String]) -> HTTPURLResponse {
+            HTTPURLResponse(url: URL(string: "https://api.github.com/graphql")!, statusCode: 429,
+                            httpVersion: nil, headerFields: headers)!
+        }
+        #expect(GitHubClient.retryDeadline(response(["Retry-After": "120"]), now: now) == now + 120)
+        #expect(GitHubClient.retryDeadline(response(["X-RateLimit-Remaining": "0", "X-RateLimit-Reset": "2000",
+                                                    "Retry-After": "120"]), now: now) == Date(timeIntervalSince1970: 2000))
+        #expect(GitHubClient.retryDeadline(response(["Retry-After": "Thu, 01 Jan 1970 00:30:00 GMT"]), now: now)
+                == Date(timeIntervalSince1970: 1800))
+        #expect(GitHubClient.retryDeadline(response(["Retry-After": "nan", "X-RateLimit-Reset": "infinity"]), now: now) == nil)
+        #expect(GitHubClient.retryDeadline(response(["Retry-After": "-1"]), now: now) == nil)
+        #expect(GitHubClient.retryDeadline(response(["X-RateLimit-Remaining": "1", "X-RateLimit-Reset": "2000"]), now: now) == nil)
+    }
+
+    @Test(arguments: [true, false])
+    func rateGateStopsLaterPagesButAllowsOtherTokens(successfulLastRequest: Bool) async throws {
+        let counter = HTTPRequestCounter()
+        let reset = Date().addingTimeInterval(3600)
+        let http = MockHTTP { request in
+            let count = counter.increment()
+            let limited = request.value(forHTTPHeaderField: "Authorization") == "Bearer limited-fixture"
+            if limited {
+                #expect(count == 1) // Any later request for this token must be stopped before transport.
+                return (HTTPURLResponse(url: request.url!, statusCode: successfulLastRequest ? 200 : 429,
+                    httpVersion: nil, headerFields: ["X-RateLimit-Remaining": "0",
+                                                     "X-RateLimit-Reset": String(Int(reset.timeIntervalSince1970))])!,
+                        Data((successfulLastRequest ? #"{"data":{"viewer":{"login":"octocat"}}}"# : "{}").utf8))
+            }
+            return (HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!,
+                    Data(#"{"data":{"viewer":{"login":"octocat"}}}"#.utf8))
+        }
+        let client = http.client
+        func query(_ token: String) async throws -> ViewerData {
+            try await client.graphQL(query: "query { viewer { login } }", variables: [String: String](), token: token)
+        }
+        if successfulLastRequest {
+            let data = try await query("limited-fixture")
+            #expect(data.viewer.login == "octocat")
+        } else {
+            do { _ = try await query("limited-fixture"); Issue.record("Expected primary limit") }
+            catch { #expect((error as? GitHubAPIError)?.retryDeadline != nil) }
+        }
+        for _ in 0..<3 {
+            do { _ = try await query("limited-fixture"); Issue.record("Expected cached restriction") }
+            catch { #expect((error as? GitHubAPIError)?.retryDeadline != nil) }
+        }
+        let data = try await query("healthy-fixture")
+        #expect(data.viewer.login == "octocat")
+        #expect(counter.value == 2)
+    }
+}
+
+private final class HTTPRequestCounter: @unchecked Sendable {
+    private let lock = NSLock()
+    private var count = 0
+    var value: Int { lock.withLock { count } }
+    func increment() -> Int { lock.withLock { count += 1; return count } }
+}
+
+extension GitHubGraphQLTests {
+    @Test func cachedSecondaryLimitWithoutHeadersRetainsExponentialBackoffSemantics() async {
+        let counter = HTTPRequestCounter()
+        let http = MockHTTP { request in
+            _ = counter.increment()
+            return (HTTPURLResponse(url: request.url!, statusCode: 429, httpVersion: nil, headerFields: nil)!, Data("{}".utf8))
+        }
+        let client = http.client
+        for _ in 0..<3 {
+            await #expect(throws: GitHubAPIError.rateLimited) {
+                let _: ViewerData = try await client.graphQL(query: "query { viewer { login } }",
+                    variables: [String: String](), token: "fixture")
+            }
+        }
+        #expect(counter.value == 1)
     }
 }

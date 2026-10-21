@@ -202,7 +202,9 @@ struct GitHubClient: Sendable {
         let message = (try? JSONDecoder().decode(APIMessage.self, from: data))?.message.lowercased() ?? ""
         if isRateLimited(response) || response.statusCode == 429 || errors.contains(where: { $0.isRateLimited })
             || (response.statusCode == 403 && message.contains("rate limit")) {
-            await rateGate.restrict(fingerprint, until: Self.retryDeadline(response) ?? Date().addingTimeInterval(60))
+            let deadline = Self.retryDeadline(response)
+            await rateGate.restrict(fingerprint, until: deadline ?? Date().addingTimeInterval(60),
+                                    error: deadline.map { .rateLimitedUntil($0) } ?? .rateLimited)
         }
         try Task.checkCancellation()
         return (data, response)
@@ -215,7 +217,7 @@ struct GitHubClient: Sendable {
     static func retryDeadline(_ response: HTTPURLResponse, now: Date = Date()) -> Date? {
         var deadlines: [Date] = []
         if let retry = response.value(forHTTPHeaderField: "Retry-After") {
-            if let seconds = Double(retry), seconds.isFinite, seconds >= 0 {
+            if let seconds = Double(retry), seconds.isFinite, seconds >= 0, seconds <= Date.distantFuture.timeIntervalSince(now) {
                 deadlines.append(now.addingTimeInterval(seconds))
             } else {
                 let format = DateFormatter()
@@ -227,24 +229,24 @@ struct GitHubClient: Sendable {
         }
         if response.value(forHTTPHeaderField: "X-RateLimit-Remaining") == "0",
            let raw = response.value(forHTTPHeaderField: "X-RateLimit-Reset"),
-           let seconds = Double(raw), seconds.isFinite, seconds >= 0 {
+           let seconds = Double(raw), seconds.isFinite, seconds >= 0, seconds <= Date.distantFuture.timeIntervalSince1970 {
             deadlines.append(Date(timeIntervalSince1970: seconds))
         }
         return deadlines.max()
     }
 
     private actor RateGate {
-        private var deadlines: [String: (date: Date, instant: ContinuousClock.Instant)] = [:]
+        private var deadlines: [String: (error: GitHubAPIError, instant: ContinuousClock.Instant)] = [:]
 
         func check(_ fingerprint: String) throws {
             deadlines = deadlines.filter { $0.value.instant > .now }
-            if let deadline = deadlines[fingerprint] { throw GitHubAPIError.rateLimitedUntil(deadline.date) }
+            if let deadline = deadlines[fingerprint] { throw deadline.error }
         }
 
-        func restrict(_ fingerprint: String, until date: Date) {
+        func restrict(_ fingerprint: String, until date: Date, error: GitHubAPIError) {
             let instant = ContinuousClock.now.advanced(by: .seconds(max(0, date.timeIntervalSinceNow)))
             if let previous = deadlines[fingerprint], previous.instant >= instant { return }
-            deadlines[fingerprint] = (date, instant)
+            deadlines[fingerprint] = (error, instant)
         }
     }
 
