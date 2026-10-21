@@ -289,11 +289,10 @@ struct GitHubPullRequestSearchResponse: Decodable, Sendable {
               var root = envelope["data"] as? [String: Any],
               var search = root["search"] as? [String: Any], var nodes = search["nodes"] as? [Any] else { return nil }
         for error in errors {
-            guard let path = error["path"] as? [Any], path.count >= 8,
+            guard let path = error["path"] as? [Any], path.count >= 4,
                   path[0] as? String == "search", path[1] as? String == "nodes",
                   let index = path[2] as? Int, nodes.indices.contains(index),
-                  path[3] as? String == "commits", path[4] as? String == "nodes", path[5] as? Int == 0,
-                  path[6] as? String == "commit", path[7] as? String == "statusCheckRollup",
+                  path[3] as? String == "commits",
                   var node = nodes[index] as? [String: Any] else { return nil }
             // Dropping the whole CI connection also handles GraphQL null bubbling safely.
             node["commits"] = NSNull()

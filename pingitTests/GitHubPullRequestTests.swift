@@ -8,7 +8,7 @@ struct GitHubPullRequestTests {
           "id":"PR_1", "number":42, "title":"Fix menu bar", "url":"https://github.com/octocat/pingit/pull/42",
           "repository":{"id":"R_1", "nameWithOwner":"octocat/pingit", "url":"https://github.com/octocat/pingit"},
           "authorLogin":"octocat", "isDraft":true, "createdAt":"2026-10-20T09:00:00Z", "updatedAt":"2026-10-21T09:00:00Z",
-          "reviewStatus":"changesRequested", "checks":{"headOid":"abc","status":"pending","detailsComplete":false},
+          "headRefOid":"abc", "reviewStatus":"changesRequested", "checks":{"headOid":"abc","status":"pending","detailsComplete":false},
           "reviewRequests":[{"user":{"login":"reviewer"}},{"team":{"organizationLogin":"acme","slug":"macos"}}]
         }
         """#
@@ -323,5 +323,85 @@ struct PullRequestChecksTests {
             let snapshot = GitHubPullRequestSearchResponse.CheckRollup(state: "SUCCESS", contexts: counts).domain(headOid: "head")
             #expect(snapshot.status == .unknown && !snapshot.detailsComplete && snapshot.failingCount == nil)
         }
+    }
+}
+
+struct PullRequestCheckMergeTests {
+    private func pr(_ status: GitHubCheckStatus, head: String = "a", updated: TimeInterval = 1,
+                    count: Int? = nil, limitation: GitHubCheckSnapshot.Limitation? = nil) -> GitHubPullRequest {
+        GitHubPullRequest(id: "pr", number: 1, title: "Title", url: URL(string: "https://github.com/a/b/pull/1")!,
+            repository: .init(id: "r", nameWithOwner: "a/b", url: URL(string: "https://github.com/a/b")!),
+            authorLogin: nil, isDraft: false, createdAt: .distantPast, updatedAt: Date(timeIntervalSince1970: updated),
+            reviewStatus: .reviewRequired, latestReviews: nil,
+            checks: .init(headOid: head, status: status, failingCount: count, detailsComplete: limitation == nil, limitation: limitation),
+            reviewRequests: nil, headRefOid: head)
+    }
+
+    private func merge(_ values: [GitHubPullRequest]) -> GitHubPullRequestDiscoveryResult {
+        .merged(values.map { .init(pullRequests: [$0], truncationReasons: [], coverageLimitations: []) })
+    }
+
+    @Test func inaccessibleTokenCanYieldToValidatedVisibleChecksForTheSameHead() {
+        let unknown = pr(.unknown, limitation: .unavailable)
+        let visible = pr(.success)
+        for inputs in [[unknown, visible], [visible, unknown]] {
+            let result = merge(inputs)
+            #expect(result.pullRequests.first?.checkStatus == .success)
+            #expect(result.pullRequests.first?.reviewStatus == .reviewRequired)
+            #expect(!result.coverageLimitations.contains(.conflictingMetadata))
+        }
+    }
+
+    @Test(arguments: [GitHubCheckStatus.pending, .failure, .noChecks, .cancelled, .skipped, .unknown])
+    func conflictingResultsNeverSelectPassingByOrder(other: GitHubCheckStatus) {
+        let success = pr(.success)
+        let competing = pr(other, limitation: other == .unknown ? .incomplete : nil)
+        for inputs in [[success, competing], [competing, success], [success, competing, success],
+                       [success, success, competing], [competing, success, success]] {
+            let result = merge(inputs)
+            let expected: GitHubCheckStatus = other == .failure ? .failure : other == .pending ? .pending : .unknown
+            #expect(result.pullRequests.first?.checkStatus == expected)
+            #expect(result.pullRequests.first?.checks?.failingCount == nil)
+            #expect(result.coverageLimitations.contains(.conflictingMetadata))
+        }
+    }
+
+    @Test func matchingFailuresKeepCountsButDisagreementsHidePrecision() {
+        let failure = pr(.failure, count: 2)
+        #expect(merge([failure, failure]).pullRequests.first?.checks?.failingCount == 2)
+        for inputs in [[failure, pr(.failure, count: 3)], [failure, pr(.pending)], [pr(.pending), failure]] {
+            #expect(merge(inputs).pullRequests.first?.checkStatus == .failure)
+            #expect(merge(inputs).pullRequests.first?.checks?.failingCount == nil)
+        }
+    }
+
+    @Test func differingHeadsAtTheSameTimestampRemainUnknownEvenWithAThirdVote() {
+        let first = pr(.success)
+        let second = pr(.failure, head: "b", count: 1)
+        for inputs in [[first, second, first], [second, first, first], [first, first, second]] {
+            let result = merge(inputs)
+            #expect(result.pullRequests.first?.headRefOid == nil)
+            #expect(result.pullRequests.first?.checkStatus == .unknown)
+            #expect(result.pullRequests.first?.checks?.limitation == .conflicting)
+            #expect(result.coverageLimitations.contains(.conflictingMetadata))
+        }
+    }
+
+    @Test func olderHeadCannotFillMissingChecksOnTheNewHead() {
+        let old = pr(.success)
+        let new = pr(.unknown, head: "b", updated: 2, limitation: .unavailable)
+        for inputs in [[old, new], [new, old]] {
+            let result = merge(inputs).pullRequests.first
+            #expect(result?.headRefOid == "b" && result?.checks?.headOid == "b")
+            #expect(result?.checkStatus == .unknown)
+        }
+        #expect(merge([pr(.failure, count: 2), pr(.success, head: "b", updated: 2)]).pullRequests.first?.checkStatus == .success)
+    }
+
+    @Test func invalidSnapshotHeadIsRejectedAtTheDomainBoundary() {
+        var value = pr(.success)
+        value.headRefOid = "b"
+        #expect(value.checkStatus == .unknown)
+        #expect(value.currentChecks?.limitation == .headMismatch)
     }
 }

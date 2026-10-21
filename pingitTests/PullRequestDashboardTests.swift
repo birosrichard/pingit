@@ -289,6 +289,47 @@ struct PullRequestDashboardTests {
         #expect(connection.errorMessage != nil)
     }
 
+    @Test func newHeadRefreshDiscardsOldCIAndRejectsLateCIFromDisconnectedSession() async throws {
+        let service = ControlledDiscovery()
+        let dashboard = makeDashboard(service)
+        func snapshot(head: String, status: GitHubCheckStatus) -> GitHubPullRequestDiscoveryResult {
+            var values = result(title: "Same PR")
+            var pr = values.pullRequests[0]
+            pr.headRefOid = head
+            pr.checks = .init(headOid: head, status: status, failingCount: nil,
+                              detailsComplete: status != .unknown, limitation: status == .unknown ? .unavailable : nil)
+            values = .init(pullRequests: [pr], truncationReasons: [], coverageLimitations: [])
+            return values
+        }
+        dashboard.setAccount(account)
+        dashboard.refresh()
+        await service.waitForCalls(2)
+        await service.resolveAll(result: snapshot(head: "old", status: .success))
+        await finish(dashboard)
+        dashboard.refresh()
+        #expect(dashboard.authored.result?.pullRequests.first?.checkStatus == .success)
+        await service.waitForCalls(4)
+        await service.resolveAll(result: snapshot(head: "new", status: .unknown))
+        await finish(dashboard)
+        #expect(dashboard.authored.result?.pullRequests.first?.headRefOid == "new")
+        #expect(dashboard.authored.result?.pullRequests.first?.checkStatus == .unknown)
+        dashboard.refresh()
+        await service.waitForCalls(6)
+        dashboard.setAccount(nil)
+        dashboard.setAccount(account)
+        dashboard.refresh()
+        await service.waitForCalls(8)
+        // Resolve the old session first despite its ignored cancellation.
+        await service.resolve(login: account.login, review: false, result: snapshot(head: "late", status: .success))
+        await service.resolve(login: account.login, review: true, result: snapshot(head: "late", status: .success))
+        await service.waitForFinishes(6)
+        #expect(dashboard.authored.result == nil)
+        await service.resolveAll(result: snapshot(head: "current", status: .pending))
+        await finish(dashboard)
+        #expect(dashboard.authored.result?.pullRequests.first?.headRefOid == "current")
+        #expect(dashboard.authored.result?.pullRequests.first?.checkStatus == .pending)
+    }
+
     private func makeDashboard(_ service: ControlledDiscovery) -> PullRequestDashboard {
         PullRequestDashboard(credential: { "test-token" }, fetch: { account, token, review in
             try await service.fetch(account: account, token: token, review: review)

@@ -41,7 +41,14 @@ struct GitHubPullRequest: Codable, Equatable, Sendable, Identifiable {
     let reviewStatus: GitHubReviewStatus?
     let latestReviews: GitHubLatestReviews?
     var checks: GitHubCheckSnapshot? = nil
-    var checkStatus: GitHubCheckStatus? { checks?.status }
+    var currentChecks: GitHubCheckSnapshot? {
+        guard let checks else { return nil }
+        guard let headRefOid, checks.headOid == headRefOid else {
+            return .unavailable(headOid: headRefOid, reason: .headMismatch)
+        }
+        return checks
+    }
+    var checkStatus: GitHubCheckStatus? { currentChecks?.status }
     let reviewRequests: [GitHubReviewRequest]?
     var headRefOid: String? = nil
     var diffStatistics: GitHubDiffStatistics? = nil
@@ -224,5 +231,24 @@ struct GitHubCheckSnapshot: Codable, Equatable, Sendable {
 
     static func unavailable(headOid: String?, reason: Limitation = .unavailable) -> Self {
         Self(headOid: headOid, status: .unknown, failingCount: nil, detailsComplete: false, limitation: reason)
+    }
+}
+
+extension GitHubCheckSnapshot {
+    static func merged(_ snapshots: [Self], headOid: String?) -> (snapshot: Self, conflicted: Bool) {
+        guard let headOid else { return (.unavailable(headOid: nil), false) }
+        let validated = snapshots.filter { $0.headOid == headOid }
+        let available = validated.filter { $0.limitation != .unavailable && $0.limitation != .headMismatch }
+        guard let first = available.first else {
+            return (validated.first ?? .unavailable(headOid: headOid), false)
+        }
+        if available.allSatisfy({ $0 == first }) { return (first, false) }
+        // PR updatedAt is not a CI observation timestamp. Conflicting token snapshots
+        // retain failure/pending evidence, never select a successful result by token order.
+        let statuses = Set(available.map(\.status))
+        let status: GitHubCheckStatus = statuses.contains(.failure) ? .failure
+            : statuses.contains(.pending) ? .pending : .unknown
+        return (Self(headOid: headOid, status: status, failingCount: nil,
+                     detailsComplete: false, limitation: .conflicting), true)
     }
 }

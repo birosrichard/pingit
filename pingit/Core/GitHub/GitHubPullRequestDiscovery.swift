@@ -17,6 +17,7 @@ struct GitHubPullRequestDiscoveryResult: Equatable, Sendable {
 
     enum CoverageLimitation: Sendable {
         // Search cannot report repositories hidden by a token's permissions or approval state.
+        case checkDataUnavailable
         case conflictingMetadata
         case tokenVisibility
         case directReviewRequestsOnly
@@ -123,6 +124,7 @@ struct GitHubPullRequestDiscovery: Sendable {
             return $0.element.updatedAt > $1.element.updatedAt
         }.map(\.element)
         var coverage: Set<GitHubPullRequestDiscoveryResult.CoverageLimitation> = [.tokenVisibility]
+        if values.contains(where: { $0.checks?.limitation != nil }) { coverage.insert(.checkDataUnavailable) }
         if reviewRequests { coverage.insert(.directReviewRequestsOnly) }
         return GitHubPullRequestDiscoveryResult(pullRequests: values, truncationReasons: reasons,
                                                 coverageLimitations: coverage)
@@ -207,13 +209,18 @@ extension GitHubPullRequestDiscoveryResult {
             let current = observations[value.id, default: []].filter { $0.updatedAt == value.updatedAt }
             let heads = Set(current.compactMap(\.headRefOid))
             let stats = current.compactMap(\.diffStatistics)
-            if heads.count > 1 || stats.contains(where: { $0 != stats.first }) {
-                value.headRefOid = heads.count == 1 ? heads.first : nil
+            if heads.count > 1 {
+                value.headRefOid = nil
                 value.diffStatistics = nil
+                value.checks = .unavailable(headOid: nil, reason: .conflicting)
                 coverage.insert(.conflictingMetadata)
             } else {
                 value.headRefOid = heads.first
-                value.diffStatistics = stats.first
+                let diffConflict = stats.contains(where: { $0 != stats.first })
+                value.diffStatistics = diffConflict ? nil : stats.first
+                let checks = GitHubCheckSnapshot.merged(current.compactMap(\.currentChecks), headOid: value.headRefOid)
+                value.checks = current.contains { $0.checks != nil } ? checks.snapshot : nil
+                if diffConflict || checks.conflicted { coverage.insert(.conflictingMetadata) }
             }
             return value
         }

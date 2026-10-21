@@ -20,7 +20,10 @@ struct PullRequestSectionState: Equatable {
             }
         }
         if result.coverageLimitations.contains(.conflictingMetadata) {
-            messages.append("Some token results disagree. Conflicting review information is shown as unknown.")
+            messages.append("Some token results disagree. Conflicting metadata is shown conservatively; CI from different heads is withheld.")
+        }
+        if result.coverageLimitations.contains(.checkDataUnavailable) {
+            messages.append("Some CI data is incomplete or unavailable. Check token access and GitHub’s fine-grained PAT limitations. Reviews and diff statistics remain independent.")
         }
         if result.coverageLimitations.contains(.tokenVisibility) {
             messages.append("Only repositories visible to your tokens are included. Some repositories may be inaccessible.")
@@ -41,6 +44,7 @@ struct DiscoveryCoveragePresentation {
         !errors.isEmpty || sections.contains {
             $0.errorMessage != nil || $0.result?.isTruncated == true
                 || $0.result?.coverageLimitations.contains(.conflictingMetadata) == true
+                || $0.result?.coverageLimitations.contains(.checkDataUnavailable) == true
         }
     }
     var label: String {
