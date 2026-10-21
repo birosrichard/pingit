@@ -225,3 +225,34 @@ final class PullRequestDashboard {
         return "Couldn’t load pull requests. Check your connection and refresh to retry."
     }
 }
+
+// Presentation categories share the same cached authored result, including its errors and coverage.
+enum PullRequestInbox: String, CaseIterable, Identifiable {
+    case review, authored, drafts
+    var id: Self { self }
+    var title: String {
+        switch self {
+        case .review: "Needs your review"
+        case .authored: "My pull requests"
+        case .drafts: "Draft pull requests"
+        }
+    }
+
+    func pullRequests(in state: PullRequestSectionState) -> [GitHubPullRequest] {
+        let requests = state.result?.pullRequests ?? []
+        switch self {
+        case .review: return requests
+        case .authored: return requests.filter { !$0.isDraft }
+        case .drafts: return requests.filter(\.isDraft)
+        }
+    }
+
+    func label(in state: PullRequestSectionState) -> String {
+        let name = switch self {
+        case .review: "Review"
+        case .authored: "My PRs"
+        case .drafts: "Drafts"
+        }
+        return "\(name) \(state.result == nil ? "—" : String(pullRequests(in: state).count))"
+    }
+}

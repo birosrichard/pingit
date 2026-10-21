@@ -8,19 +8,29 @@
 
 # Live pull request dashboard (Phase 3D)
 
-The menu bar shows **Needs your review** (active direct requests) and **My pull
-requests** (authored open PRs, including drafts). Each section has its own loaded
-count, progress, last-success timestamp, empty state, error, and coverage notes.
-Rows show title, repository, ungrouped PR number, draft state, and either author
-or GitHub's authoritative review decision. Approved does not mean merge-ready.
-Unknown decisions remain explicitly unknown; CI is not fetched.
+The menu bar uses a full-width segmented navigation: **Review** (active direct requests),
+**My PRs** (authored open PRs excluding drafts), and **Drafts** (authored drafts).
+My PRs and Drafts filter the same aggregated cached result; their counts never
+overlap. Counts show a dash before results arrive and retain the cached counts
+on failure. Fetching, deduplication, cancellation and token handling are unchanged.
 
-The native SwiftUI popover is 380 points wide with a 440-point scrolling content
-area, system typography/colors, two-line title truncation, native Links, hover
-feedback, and accessibility labels. Settings and Quit remain available; Refresh
-also supports ⌘R. macOS keyboard navigation settings determine Tab traversal of
-native controls. Light/dark, focus, VoiceOver, and browser activation require a
-manual acceptance pass.
+The popover is 440 points wide with opaque, system-aware header/footer and
+contrasting content surfaces. Header, navigation and footer
+stay visible; only the PR list scrolls, up to 360 points. Short lists shrink and
+empty states use 180 points. Rows show a two-line title, repository and PR number,
+relative update age (with a full-date tooltip), and either author or authoritative
+review decision. Hover highlighting, native Links and keyboard focus remain.
+Approved does not establish merge readiness. Review and CI are separate indicators;
+unknown review decisions stay neutral, and absent CI data displays no CI indicator.
+Discovery still does not fetch CI.
+
+The footer shows an always-visible coverage/details button. Any error in either
+query changes it to **GitHub needs attention**, even when another tab is selected.
+Its tooltip and details popover retain named failures, repository coverage limits,
+truncation and direct-only review semantics. Empty results are explicitly scoped to
+token-visible repositories. Failed refreshes retain previous rows and timestamps.
+Settings (⌘,), Quit (⌘Q), and Refresh (⌘R) remain native controls. The segment buttons support native keyboard focus and ⌘1 / ⌘2 / ⌘3 shortcuts.
+Selected segments expose their selection state to accessibility.
 
 ## State and account lifetime
 
@@ -40,7 +50,8 @@ A 60-second threshold since the last attempt avoids refetching on rapid openings
 including after errors. Explicit Refresh bypasses freshness; simultaneous refresh
 is ignored and the button is disabled while either section loads. There are no
 timers, background polling, automatic retry loops, or disk PR caches. A popover
-left open displays the absolute last-success timestamp without a timer updating it.
+left open updates row ages once a minute; this does not trigger network requests.
+The footer retains the absolute last-success update time.
 
 The credential loads once per refresh, stays outside observable state, and goes
 only to the existing discovery services. Errors use fixed sanitized messages,
@@ -131,3 +142,55 @@ the distinction between overall decisions and individual reviewer details.
 The next phase should be separately scoped: first close these live acceptance gaps,
 then choose review/activity work (roadmap Phase 4) or read-only CI integration
 (Phase 5). Neither is included in Phase 3D; polling and notifications remain deferred.
+
+
+## Inbox redesign validation — 2026-10-21
+
+- Debug build and all 142 tests in 11 suites pass with Swift 6, complete strict
+  concurrency, and Swift warnings treated as errors. New tests cover exclusive
+  draft filtering, loaded versus unavailable counts, cached results on failure,
+  and compact relative-time boundaries including future timestamps.
+- Bundle, signature, sandbox/network entitlement validation and the launch smoke
+  test pass. Compiler plugins, the test runner and app launch required access
+  outside the shell sandbox.
+- User-provided screenshots of the running redesign confirm populated Review,
+  My PRs and Drafts, long titles, mutually exclusive counts (11 + 4), scrolling,
+  and persistent header/navigation/footer in light appearance.
+- Computer Use access timed out, so direct interactive visual verification was
+  unavailable. Dark appearance, empty/loading/error states, large counts,
+  VoiceOver, keyboard activation and browser opening still need manual checking.
+- Xcode emits its standard AppIntents metadata extraction notice because the app
+  has no AppIntents dependency. No backend or API scope changes were made.
+
+### Remaining visual checks
+
+1. Run the latest build, inspect all three tabs in light and dark appearance,
+   and use Tab/arrow keys to select segments and activate PR links. Check VoiceOver
+   names, long repository truncation tooltips and full update-time tooltips.
+2. Check an empty Review inbox: it should show “All caught up” with token-visible
+   scope. Check many rows and large counts: only the list should scroll.
+3. Press ⌘R: progress appears and Refresh is disabled while cached rows stay visible.
+   Temporarily go offline and refresh: the footer must show GitHub needs attention,
+   with details and previous results. Restore networking and refresh.
+4. Open Limited coverage: repository visibility and direct-only limits must be
+   readable. Inspect any naturally occurring partial-token or authentication
+   failure in the details panel and Settings; do not change token access to test it.
+
+
+## Visual refinement pass — 2026-10-21
+
+Compared the original reference image directly with the supplied running My PRs
+screenshot. The three largest differences were the small floating navigation,
+uniform gray surface, and undersized header/row typography. This view-only pass
+replaces the stock picker with equally sized full-width segment buttons and count
+badges, separates content from header/footer using opaque semantic system colors,
+and strengthens the header and title hierarchy. Row margins align with the header;
+metadata is now 12 points, titles 14, section headings 17, and the app name 20.
+No data-fetching, token handling, cache or review semantics changed.
+
+The Swift 6 Debug build, all 142 tests, bundle validation and launch smoke test
+pass. Computer Use app access repeatedly timed out, so
+no new screenshot was captured and the requested render/compare iteration remains
+unverified. The supplied screenshots validate the earlier version only. Run the
+latest build and capture Review / My PRs / Drafts in light and dark appearance to
+verify the refined proportions, badges, contrast, focus, and long titles.

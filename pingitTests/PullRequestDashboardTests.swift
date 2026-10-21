@@ -609,3 +609,25 @@ extension MultiTokenDashboardTests {
         #expect(conflicted.coverageLimitations.contains(.conflictingMetadata))
     }
 }
+
+struct PullRequestInboxTests {
+    @Test func authoredAndDraftCountsAreMutuallyExclusiveAndKeepReviewMembership() {
+        func pr(_ id: String, draft: Bool) -> GitHubPullRequest {
+            GitHubPullRequest(id: id, number: 1, title: "Title", url: URL(string: "https://github.com/a/b/pull/1")!,
+                              repository: GitHubRepository(id: "r", nameWithOwner: "a/b", url: URL(string: "https://github.com/a/b")!),
+                              authorLogin: "a", isDraft: draft, createdAt: .distantPast, updatedAt: .distantPast,
+                              reviewStatus: nil, latestReviews: nil, checkStatus: nil, reviewRequests: nil)
+        }
+        let state = PullRequestSectionState(phase: .failed,
+            result: GitHubPullRequestDiscoveryResult(pullRequests: [pr("open", draft: false), pr("draft", draft: true)],
+                truncationReasons: [], coverageLimitations: [.tokenVisibility]), errorMessage: "Offline")
+        #expect(PullRequestInbox.authored.pullRequests(in: state).map(\.id) == ["open"])
+        #expect(PullRequestInbox.drafts.pullRequests(in: state).map(\.id) == ["draft"])
+        #expect(PullRequestInbox.review.pullRequests(in: state).count == 2)
+        #expect(PullRequestInbox.authored.label(in: state) == "My PRs 1")
+        #expect(PullRequestInbox.drafts.label(in: state) == "Drafts 1")
+        #expect(PullRequestInbox.review.label(in: .init()) == "Review —")
+        #expect(PullRequestInbox.drafts.label(in: PullRequestSectionState(phase: .loaded,
+            result: GitHubPullRequestDiscoveryResult(pullRequests: [], truncationReasons: [], coverageLimitations: []))) == "Drafts 0")
+    }
+}

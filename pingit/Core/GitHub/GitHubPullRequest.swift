@@ -101,3 +101,13 @@ struct GitHubPullRequestReview: Codable, Equatable, Sendable, Identifiable {
         case unknown
     }
 }
+
+extension GitHubPullRequest {
+    func compactUpdatedAge(relativeTo now: Date) -> String {
+        let seconds = max(0, now.timeIntervalSince(updatedAt))
+        if seconds < 60 { return "now" }
+        if seconds < 3_600 { return "\(Int(seconds / 60))m" }
+        if seconds < 86_400 { return "\(Int(seconds / 3_600))h" }
+        return "\(Int(seconds / 86_400))d"
+    }
+}

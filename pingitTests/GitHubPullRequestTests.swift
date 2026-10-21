@@ -120,3 +120,15 @@ extension GitHubPullRequestTests {
         }
     }
 }
+
+extension GitHubPullRequestTests {
+    @Test(arguments: [(-60.0, "now"), (0, "now"), (59, "now"), (60, "1m"), (3599, "59m"),
+                      (3600, "1h"), (86399, "23h"), (86400, "1d"), (259200, "3d")])
+    func compactUpdatedAge(seconds: Double, expected: String) {
+        let pr = GitHubPullRequest(id: "age", number: 1, title: "Title", url: URL(string: "https://github.com/a/b/pull/1")!,
+            repository: GitHubRepository(id: "r", nameWithOwner: "a/b", url: URL(string: "https://github.com/a/b")!),
+            authorLogin: nil, isDraft: false, createdAt: .distantPast, updatedAt: Date(timeIntervalSince1970: 0),
+            reviewStatus: nil, latestReviews: nil, checkStatus: nil, reviewRequests: nil)
+        #expect(pr.compactUpdatedAge(relativeTo: Date(timeIntervalSince1970: seconds)) == expected)
+    }
+}

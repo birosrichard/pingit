@@ -6,7 +6,7 @@ pull requests, reviews, comments, and CI updates that need your attention.
 **Current status: Phase 3E — Multiple Fine-Grained GitHub Tokens.** Connect one GitHub.com
 account with multiple personal access tokens stored independently in macOS Keychain. Open the menu bar
 to see active direct review requests and authored open PRs, review decisions,
-drafts, counts, timestamps, and repository visibility limits. Open PRs on GitHub,
+separate Review / My PRs / Drafts inboxes, counts, relative timestamps, and repository visibility limits. Open PRs on GitHub,
 or refresh with the button/⌘R. Results stay in memory, refresh after a 60-second
 freshness window on opening. Removing a token discards its exclusive results. CI, polling, and notifications
 remain deferred. See [dashboard behavior and validation](docs/dashboard.md),

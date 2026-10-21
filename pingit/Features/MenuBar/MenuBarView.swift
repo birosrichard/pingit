@@ -5,198 +5,280 @@ struct MenuBarView: View {
     @Environment(GitHubConnection.self) private var connection
     @Environment(\.openSettings) private var openSettings
     @State private var isShowingConnection = false
+    @State private var selection = PullRequestInbox.review
+    @State private var isShowingDetails = false
 
     private var dashboard: PullRequestDashboard { connection.dashboard }
+    private var state: PullRequestSectionState {
+        selection == .review ? dashboard.reviews : dashboard.authored
+    }
+    private var pullRequests: [GitHubPullRequest] { selection.pullRequests(in: state) }
+    private var errors: [String] {
+        [connection.errorMessage,
+         dashboard.reviews.errorMessage.map { "Review: \($0)" },
+         dashboard.authored.errorMessage.map { "My PRs and drafts: \($0)" }].compactMap { $0 }
+    }
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack(spacing: 10) {
-                Image("PingitMark")
-                    .resizable()
-                    .frame(width: 32, height: 32)
-                    .accessibilityHidden(true)
-
-                Text("pingit")
-                    .font(.headline)
-
-                Spacer()
-
-                if dashboard.isLoading {
-                    ProgressView()
-                        .controlSize(.small)
-                        .accessibilityLabel("Refreshing pull requests")
-                }
-
-                Button("Refresh", systemImage: "arrow.clockwise") { dashboard.refresh() }
-                    .labelStyle(.iconOnly)
-                    .disabled(connection.account == nil || dashboard.isLoading)
-                    .keyboardShortcut("r")
-                    .help("Refresh pull requests (⌘R)")
-            }
-            .padding(16)
-
+            header
             Divider()
 
             if isShowingConnection && connection.account == nil {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 16) {
                         HStack {
-                            Text("Connect GitHub")
-                                .font(.headline)
+                            Text("Connect GitHub").font(.headline)
                             Spacer()
-                            Button("Back", systemImage: "chevron.left") {
-                                isShowingConnection = false
-                            }
-                            .buttonStyle(.borderless)
+                            Button("Back", systemImage: "chevron.left") { isShowingConnection = false }
+                                .buttonStyle(.borderless)
                         }
-
                         GitHubConnectionControls()
                     }
                     .padding(20)
                 }
-                .frame(height: 440)
-            } else if let account = connection.account {
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 16) {
-                        Text("@\(account.login)")
-                            .font(.callout)
-                            .foregroundStyle(.secondary)
-                            .textSelection(.enabled)
-                        PullRequestSection(title: "Needs your review", state: dashboard.reviews,
-                                           emptyMessage: "Nothing needs your review.", showsAuthor: true)
-                        Divider()
-                        PullRequestSection(title: "My pull requests", state: dashboard.authored,
-                                           emptyMessage: "No open pull requests.", showsAuthor: false)
-                    }
-                    .padding(16)
-                }
-                .frame(height: 440)
+                .frame(height: 360)
+            } else if connection.account != nil {
+                inbox
             } else {
-                VStack(spacing: 12) {
-                    if connection.isConnecting {
-                        ProgressView()
-                        Text("Connecting to GitHub…")
-                            .font(.headline)
-                    } else {
-                        Image(systemName: "link")
-                            .font(.system(size: 30, weight: .light))
-                            .foregroundStyle(.secondary)
-                            .accessibilityHidden(true)
-
-                        Text(connection.hasSavedCredential ? "GitHub needs attention" : "GitHub isn’t connected")
-                            .font(.headline)
-
-                        Text(connection.errorMessage ?? "Connect your GitHub account to get started.")
-                            .font(.callout)
-                            .foregroundStyle(.secondary)
-
-                        Button("Connect GitHub") {
-                            isShowingConnection = true
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .controlSize(.large)
-                    }
-                }
-                .multilineTextAlignment(.center)
-                .fixedSize(horizontal: false, vertical: true)
-                .frame(maxWidth: .infinity)
-                .padding(.horizontal, 24)
-                .padding(.vertical, 28)
+                disconnected
             }
 
             Divider()
-
-            HStack {
-                Button("Settings…", systemImage: "gearshape") {
-                    // A menu bar interaction does not activate an agent app on its own.
-                    NSApplication.shared.activate(ignoringOtherApps: true)
-                    openSettings()
-                }
-                .keyboardShortcut(",")
-
-                Spacer()
-
-                Button("Quit pingit") {
-                    NSApplication.shared.terminate(nil)
-                }
-                .keyboardShortcut("q")
-            }
-            .buttonStyle(.borderless)
-            .font(.callout)
-            .padding(12)
+            footer
         }
-        .frame(width: 380)
+        .frame(width: 440)
+        .background(Color(nsColor: .windowBackgroundColor))
         .onAppear { dashboard.loadIfNeeded() }
         .onChange(of: connection.account) { _, account in
+            selection = .review
             if account != nil {
                 isShowingConnection = false
                 dashboard.loadIfNeeded()
             }
         }
     }
-}
 
-private struct PullRequestSection: View {
-    let title: String
-    let state: PullRequestSectionState
-    let emptyMessage: String
-    let showsAuthor: Bool
+    private var header: some View {
+        HStack(spacing: 12) {
+            Image("PingitMark")
+                .resizable()
+                .frame(width: 32, height: 32)
+                .frame(width: 34)
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 4) {
+                Text("pingit").font(.system(size: 20, weight: .bold))
+                if let account = connection.account {
+                    Text("@\(account.login) · \(connection.connections.count) \(connection.connections.count == 1 ? "token" : "tokens")")
+                        .font(.system(size: 12))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                        .help("Aggregated across configured tokens for @\(account.login)")
+                }
+            }
+            Spacer(minLength: 8)
+            if dashboard.isLoading {
+                ProgressView().controlSize(.small)
+                    .accessibilityLabel("Refreshing pull requests")
+            }
+            Button { dashboard.refresh() } label: {
+                Image(systemName: "arrow.clockwise")
+                    .font(.system(size: 17, weight: .medium))
+                    .frame(width: 36, height: 32)
+                    .background(Color.primary.opacity(0.045), in: RoundedRectangle(cornerRadius: 9))
+            }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Refresh pull requests")
+                .disabled(connection.account == nil || dashboard.isLoading)
+                .keyboardShortcut("r")
+                .help("Refresh pull requests (⌘R)")
+        }
+        .padding(.horizontal, 20)
+        .padding(.vertical, 16)
+    }
 
-    var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+    private var inbox: some View {
+        VStack(spacing: 0) {
+            navigation
+                .padding(.horizontal, 16)
+                .padding(.vertical, 14)
+                .background(Color(nsColor: .windowBackgroundColor))
+
             HStack {
-                Text(title)
-                    .font(.headline)
+                Text(selection.title).font(.system(size: 17, weight: .bold))
                     .accessibilityAddTraits(.isHeader)
                 Spacer()
-                Text(state.result.map { String($0.pullRequests.count) } ?? "—")
-                    .monospacedDigit()
-                    .foregroundStyle(.secondary)
-                    .accessibilityLabel(state.result.map { "\($0.pullRequests.count) loaded pull requests" } ?? "Count unavailable")
+                if selection == .review {
+                    Text("Direct requests").font(.caption).foregroundStyle(.secondary)
+                        .help("Team review requests aren’t included.")
+                }
             }
+            .padding(.horizontal, 20)
+            .padding(.top, 16)
+            .padding(.bottom, 10)
 
-            if state.phase == .loading || state.phase == .idle {
-                Label(state.result == nil ? "Loading pull requests…" : "Refreshing…", systemImage: "arrow.triangle.2.circlepath")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-            }
-
-            if let error = state.errorMessage {
-                Label(error, systemImage: "exclamationmark.triangle")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                Text("Use Refresh to retry. Settings can help with connection or token access.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-
-            if let result = state.result {
-                if result.pullRequests.isEmpty {
-                    Text(emptyMessage)
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                } else {
-                    LazyVStack(spacing: 4) {
-                        ForEach(result.pullRequests) { pr in
-                            PullRequestRow(pr: pr, showsAuthor: showsAuthor)
+            if pullRequests.isEmpty {
+                emptyState
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 180)
+            } else {
+                ScrollView {
+                    LazyVStack(spacing: 0) {
+                        ForEach(pullRequests) { pr in
+                            PullRequestRow(pr: pr, showsAuthor: selection == .review)
+                            if pr.id != pullRequests.last?.id {
+                                Divider().padding(.leading, 58).padding(.trailing, 12)
+                            }
                         }
                     }
+                    .padding(.horizontal, 8)
+                    .padding(.bottom, 6)
                 }
-                if let date = state.updatedAt {
-                    Text("\(state.phase == .failed ? "Showing previous results from" : "Updated") \(date.formatted(date: .abbreviated, time: .standard))")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-                ForEach(state.coverageMessages, id: \.self) { message in
-                    Label(message, systemImage: result.isTruncated && message == state.coverageMessages.first
-                          ? "exclamationmark.circle" : "info.circle")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
+                .frame(height: min(360, CGFloat(pullRequests.count) * 108 + 6))
             }
         }
+        .background(Color(nsColor: .controlBackgroundColor))
+    }
+
+    private var navigation: some View {
+        HStack(spacing: 4) {
+            ForEach(Array(PullRequestInbox.allCases.enumerated()), id: \.element.id) { index, tab in
+                let tabState = tab == .review ? dashboard.reviews : dashboard.authored
+                let isSelected = tab == selection
+                Button { selection = tab } label: {
+                    HStack(spacing: 6) {
+                        Text(tab == .review ? "Review" : tab == .authored ? "My PRs" : "Drafts")
+                            .font(.system(size: 13, weight: isSelected ? .semibold : .medium))
+                        Text(tabState.result == nil ? "—" : String(tab.pullRequests(in: tabState).count))
+                            .font(.system(size: 11, weight: .semibold))
+                            .monospacedDigit()
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .foregroundStyle(isSelected ? Color(nsColor: .controlBackgroundColor) : .secondary)
+                            .background(isSelected ? Color.primary : Color.primary.opacity(0.07), in: Capsule())
+                    }
+                    .frame(maxWidth: .infinity, minHeight: 32)
+                    .contentShape(RoundedRectangle(cornerRadius: 8))
+                    .background(isSelected ? Color(nsColor: .controlBackgroundColor) : .clear,
+                                in: RoundedRectangle(cornerRadius: 8))
+                }
+                .buttonStyle(.plain)
+                .keyboardShortcut(KeyEquivalent(Character(String(index + 1))), modifiers: .command)
+                .accessibilityLabel(tab.label(in: tabState))
+                .accessibilityAddTraits(isSelected ? .isSelected : [])
+                .help("\(tab.title) (⌘\(index + 1))")
+            }
+        }
+        .padding(4)
+        .background(Color.primary.opacity(0.055), in: RoundedRectangle(cornerRadius: 11))
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Inbox navigation")
+    }
+
+    private var emptyState: some View {
+        VStack(spacing: 7) {
+            if state.phase == .idle || state.phase == .loading {
+                Text("Loading pull requests…").font(.headline)
+            } else if state.phase == .failed {
+                Image(systemName: "exclamationmark.triangle").foregroundStyle(.orange)
+                Text("Couldn’t update this inbox").font(.headline)
+                Text("Refresh to retry, or open the warning below for details.")
+                    .font(.callout).foregroundStyle(.secondary)
+            } else {
+                Image(systemName: selection == .review ? "checkmark.circle" : "tray")
+                    .font(.title2).foregroundStyle(.secondary)
+                Text(selection == .review ? "All caught up" : selection == .drafts ? "No drafts" : "No open pull requests")
+                    .font(.headline)
+                Text(selection == .review ? "No direct requests in the repositories visible to your tokens." : "Nothing here in the repositories visible to your tokens.")
+                    .font(.callout).foregroundStyle(.secondary)
+            }
+        }
+        .multilineTextAlignment(.center)
+        .padding(.horizontal, 28)
+        .accessibilityElement(children: .combine)
+    }
+
+    private var disconnected: some View {
+        VStack(spacing: 12) {
+            if connection.isConnecting {
+                ProgressView()
+                Text("Connecting to GitHub…").font(.headline)
+            } else {
+                Image(systemName: "link").font(.system(size: 28, weight: .light)).foregroundStyle(.secondary)
+                Text(connection.hasSavedCredential ? "GitHub needs attention" : "GitHub isn’t connected")
+                    .font(.headline)
+                Text(connection.errorMessage ?? "Connect your GitHub account to get started.")
+                    .font(.callout).foregroundStyle(.secondary)
+                Button("Connect GitHub") { isShowingConnection = true }
+                    .buttonStyle(.borderedProminent)
+            }
+        }
+        .multilineTextAlignment(.center)
+        .frame(maxWidth: .infinity)
+        .padding(28)
+    }
+
+    private var footer: some View {
+        VStack(spacing: 10) {
+            if connection.account != nil {
+                HStack(spacing: 6) {
+                    Button {
+                        isShowingDetails.toggle()
+                    } label: {
+                        Label(errors.isEmpty ? "Limited coverage" : "GitHub needs attention",
+                              systemImage: errors.isEmpty ? "info.circle" : "exclamationmark.triangle.fill")
+                            .foregroundStyle(errors.isEmpty ? Color.secondary : .orange)
+                    }
+                    .help((errors + dashboard.reviews.coverageMessages + dashboard.authored.coverageMessages).joined(separator: "\n"))
+                    .popover(isPresented: $isShowingDetails) { coverageDetails }
+                    Spacer(minLength: 4)
+                    if let date = state.updatedAt {
+                        Text(state.phase == .failed ? "Previous results" : "Updated \(date.formatted(date: .omitted, time: .shortened))")
+                            .foregroundStyle(.secondary)
+                            .help("Last successful update: \(date.formatted(date: .complete, time: .standard))")
+                    }
+                }
+                .font(.caption)
+            }
+            HStack {
+                Button("Settings…", systemImage: "gearshape") {
+                    NSApplication.shared.activate(ignoringOtherApps: true)
+                    openSettings()
+                }
+                .keyboardShortcut(",")
+                Spacer()
+                Button("Quit pingit") { NSApplication.shared.terminate(nil) }
+                    .keyboardShortcut("q")
+            }
+            .font(.callout)
+        }
+        .buttonStyle(.borderless)
+        .padding(.horizontal, 20)
+        .padding(.vertical, 12)
+        .foregroundStyle(.secondary)
+    }
+
+    private var coverageDetails: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("GitHub coverage & updates").font(.headline)
+                ForEach(errors, id: \.self) { error in
+                    Label(error, systemImage: "exclamationmark.triangle")
+                        .foregroundStyle(.orange)
+                }
+                if !errors.isEmpty {
+                    Text("Refresh to retry. Check Settings for token, permission, or authentication issues. Previous results may be shown.")
+                }
+                ForEach(Array(Set(dashboard.reviews.coverageMessages + dashboard.authored.coverageMessages)).sorted(), id: \.self) { message in
+                    Text(message).foregroundStyle(.secondary)
+                }
+            }
+            .font(.callout)
+            .fixedSize(horizontal: false, vertical: true)
+            .padding(16)
+        }
+        .frame(width: 340, height: 280)
     }
 }
 
@@ -205,77 +287,90 @@ private struct PullRequestRow: View {
     let showsAuthor: Bool
     @State private var isHovered = false
 
-    private var reviewLabel: String {
-        switch pr.reviewStatus {
-        case .approved: "Approved"
-        case .changesRequested: "Changes requested"
-        case .reviewRequired: "Review required"
-        case .unknown, nil: "Review status unknown"
-        }
-    }
-
-    private var reviewSymbol: String {
-        switch pr.reviewStatus {
-        case .approved: "checkmark.circle"
-        case .changesRequested: "exclamationmark.bubble"
-        case .reviewRequired: "person.crop.circle.badge.clock"
-        case .unknown, nil: "questionmark.circle"
-        }
-    }
-
     var body: some View {
         Group {
             if let url = pr.browserURL {
                 Link(destination: url) { content }
                     .buttonStyle(.plain)
-                    .accessibilityLabel("\(pr.title), \(pr.repository.nameWithOwner), pull request \(pr.number)\(pr.isDraft ? ", draft" : "")\(showsAuthor ? pr.authorLogin.map { ", by \($0)" } ?? "" : ", \(reviewLabel)"). Open on GitHub.")
-                    .help("Open on GitHub: \(pr.title)")
+                    .help("\(pr.title)\n\(pr.repository.nameWithOwner) #\(pr.number)\nOpen on GitHub")
             } else {
-                content
-                    .accessibilityElement(children: .combine)
-                    .help("This pull request has an invalid GitHub URL.")
+                content.help("This pull request has an invalid GitHub URL.")
             }
         }
+        .accessibilityElement(children: .combine)
         .onHover { isHovered = $0 }
     }
 
     private var content: some View {
-        HStack(alignment: .top, spacing: 10) {
-            GitHubOwnerAvatar(owner: pr.repository.ownerLogin, size: 28)
-            VStack(alignment: .leading, spacing: 5) {
-                Text(pr.title)
-                    .font(.system(.body, weight: .medium))
-                    .lineLimit(2)
-                    .truncationMode(.tail)
-                    .multilineTextAlignment(.leading)
-                Text("\(pr.repository.nameWithOwner) #\(String(pr.number))")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-                HStack(spacing: 8) {
-                    if pr.isDraft { Text("Draft") }
-                    if showsAuthor {
-                        Text(pr.authorLogin.map { "by @\($0)" } ?? "Author unavailable")
-                            .lineLimit(1)
-                    } else {
-                        Label(reviewLabel, systemImage: reviewSymbol)
-                            .help("GitHub’s review decision. Approval alone does not establish merge readiness.")
+        HStack(alignment: .top, spacing: 12) {
+            GitHubOwnerAvatar(owner: showsAuthor ? pr.authorLogin : pr.repository.ownerLogin, size: 32)
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Text(pr.title)
+                        .font(.system(size: 14, weight: .semibold))
+                        .lineLimit(2)
+                        .multilineTextAlignment(.leading)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    TimelineView(.periodic(from: .now, by: 60)) { context in
+                        Text(pr.compactUpdatedAge(relativeTo: context.date))
                     }
+                    .font(.system(size: 11)).monospacedDigit().foregroundStyle(.secondary)
+                    .fixedSize()
+                    .help("Updated \(pr.updatedAt.formatted(date: .complete, time: .standard))")
+                    .accessibilityLabel("Updated \(pr.updatedAt.formatted(date: .abbreviated, time: .shortened))")
                 }
-                .font(.caption)
-                .foregroundStyle(.secondary)
+                Text("\(pr.repository.nameWithOwner) #\(String(pr.number))")
+                    .font(.system(size: 12)).foregroundStyle(.secondary)
+                    .lineLimit(1).truncationMode(.middle)
+                    .help("\(pr.repository.nameWithOwner) #\(pr.number)")
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: 10) { metadata }
+                    VStack(alignment: .leading, spacing: 4) { metadata }
+                }
+                .font(.system(size: 12))
                 if pr.browserURL == nil {
-                    Label("GitHub link unavailable", systemImage: "link.badge.plus")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                    Label("GitHub link unavailable", systemImage: "link")
+                        .font(.caption).foregroundStyle(.secondary)
                 }
             }
         }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 14)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(8)
         .contentShape(Rectangle())
         .background(isHovered && pr.browserURL != nil ? Color.primary.opacity(0.06) : .clear,
-                    in: RoundedRectangle(cornerRadius: 5))
+                    in: RoundedRectangle(cornerRadius: 6))
+    }
+
+    @ViewBuilder private var metadata: some View {
+        if pr.isDraft {
+            Label("Draft", systemImage: "pencil.circle").foregroundStyle(.secondary)
+        }
+        if showsAuthor {
+            Text(pr.authorLogin.map { "@\($0)" } ?? "Author unavailable")
+                .foregroundStyle(.secondary).lineLimit(1)
+        } else {
+            switch pr.reviewStatus {
+            case .approved:
+                Label("Approved", systemImage: "checkmark.circle.fill").foregroundStyle(.green)
+            case .changesRequested:
+                Label("Changes requested", systemImage: "exclamationmark.bubble.fill").foregroundStyle(.red)
+            case .reviewRequired:
+                Label("Review pending", systemImage: "clock").foregroundStyle(.orange)
+            case .unknown, nil:
+                Label("Review unknown", systemImage: "questionmark.circle").foregroundStyle(.secondary)
+            }
+        }
+        // CI is independent of the review decision; nil means it was not fetched.
+        switch pr.checkStatus {
+        case .success:
+            Label("Checks passing", systemImage: "checkmark.seal.fill").foregroundStyle(.green)
+        case .failure:
+            Label("Checks failing", systemImage: "xmark.circle.fill").foregroundStyle(.red)
+        case .pending:
+            Label("Checks pending", systemImage: "clock").foregroundStyle(.orange)
+        case nil:
+            EmptyView()
+        }
     }
 }
