@@ -1,47 +1,87 @@
 # Architecture
 
-## Phase 1 decisions
-
 pingit is a macOS 14+ SwiftUI menu bar utility built with Swift 6 and complete
-concurrency checking. It has one application target and no dependencies.
+concurrency checking. It has one application target, one unhosted unit test target,
+and no external dependencies.
 
-- `pingit/App/` owns the SwiftUI lifecycle and scenes.
-- `pingit/Features/MenuBar/` owns the popover and its disconnected state.
-- `pingit/Features/Settings/` owns the native Settings view.
-- `pingit/Resources/` holds the Info.plist and sandbox entitlements.
+- `pingit/App/` owns the SwiftUI lifecycle, scenes, and shared connection lifetime.
+- `pingit/Core/Authentication/` owns the API client, Keychain store, and connection state.
+- `pingit/Features/MenuBar/` owns the popover and connection status.
+- `pingit/Features/Settings/` owns native connection setup and the shared account view.
+- `pingit/Resources/` holds Info.plist and sandbox entitlements.
+- `pingitTests/` contains mocked authentication and credential lifecycle tests.
 - `Configuration/App.xcconfig` centralizes bundle identity, versions, and build policy.
 
-Use a window-style `MenuBarExtra` for the popover and a native `Settings` scene.
-Set `LSUIElement` so there is no persistent Dock icon or initial main window.
-Keep App Sandbox and hardened runtime enabled, with no network or file permissions
-in this phase. Use semantic styles so the interface follows system appearance.
+## Scenes and connection lifetime
 
-Views need no model layer until real state exists. Do not add service protocols,
-dependency injection containers, persistence, polling, or authentication stubs.
+`PingitApp` owns one `@State` instance of `GitHubConnection`, starts a single startup
+restoration task independently of either view appearing, and injects the same
+observable object into the window-style `MenuBarExtra` and native `Settings` scene.
+There is no `WindowGroup`. `LSUIElement` avoids a persistent Dock icon/main window.
 
-The repository starts empty on `main`; work stays on that branch in small commits.
+`GitHubConnection` is `@MainActor` and `@Observable`. Only nonsecret account data,
+busy state, credential presence, and sanitized error text reach the views. Connect
+validates before saving; a storage failure cannot become a connected state.
+Restoration reads Keychain and validates once per launch. Transient failures retain
+the credential for explicit retry. Unauthorized saved tokens are deleted, with
+removal errors reported. Disconnect only clears account state after deletion succeeds.
+Duplicate attempts/disconnect are blocked during validation; cancellation cannot
+commit a validated account/token. There is no background retry or polling.
 
-## Scene behavior
+Settings holds only an unsaved token draft. Submission clears it before the
+asynchronous attempt; successful connection and view disappearance clear it too.
+The connected view never reads a token. The menu bar shows connection status,
+Settings, disabled Refresh, and Quit. Opening Settings activates the agent app
+through AppKit. These UI actions remain on the main actor.
 
-`PingitApp` creates the menu bar scene and Settings scene, with no `WindowGroup`.
-`MenuBarView` shows only the disconnected state. Refresh is disabled, Settings
-uses SwiftUI's `openSettings` action after activating the agent app, and Quit
-terminates through AppKit. `SettingsView` reads version/build from the app bundle.
-These UI actions execute on the main actor; there is no background work yet.
+## API and credential boundaries
 
-## Planned boundaries
+`GitHubClient` uses Foundation URLSession and a fixed HTTPS `GET /user` endpoint.
+Its ephemeral production session has no disk cache/credential storage or cookie
+acceptance, bounded timeouts, and rejects every redirect. It decodes only username
+and HTTPS avatar URL. HTTP authentication, forbidden, primary/secondary rate limit,
+network, and unexpected-response failures become fixed messages; raw errors and
+server bodies never reach the UI. Avatar requests are separate and unauthenticated.
+The successful `/user` response proves identity, not repository/organization access.
 
-Add authentication and Keychain credential handling in Phase 2. GitHub API work
-should live outside the views and use asynchronous calls, with UI state isolated
-to the main actor. Add concrete types when required; introduce protocols only
-where a real replacement or test boundary needs them. Polling and notification
-delivery belong outside view lifetimes and must be cancellable on disconnect/quit.
-Preferences and repository selection follow in their own phase.
+`KeychainCredentialStore` uses the Security SecItem APIs against the macOS Data
+Protection Keychain. One generic password item uses the bundle-specific service
+and fixed account name. It is nonsynchronizing and accessible only when unlocked,
+with `ThisDeviceOnly` protection. Duplicate items update atomically; a missing item
+on removal is success. A provisioned app-specific Keychain access group is configured
+through Keychain Sharing. Real credential use requires an Apple development team
+and signing profile; ad hoc UI builds receive a clear signing error. There is no
+legacy Keychain or plaintext fallback. No development team/credentials are committed.
 
-Both distribution paths should share this sandboxed app target. Signing,
-notarization, store assets, and packaging are Phase 8 work. There are no GitHub
-tokens, network entitlements, stored preferences, or placeholder services in
-Phase 1.
+App Sandbox permits outbound networking only. It grants no file access, network
+server access, or temporary exceptions. ATS remains enabled with no overrides.
+Hardened runtime remains configured (Xcode disables it for ad hoc builds).
+
+## Test boundaries
+
+A test-only URLSession can be supplied to the concrete API client. The concrete
+Keychain store accepts four narrow Security operation closures, so tests can check
+actual query attributes and lifecycle without touching the user's Keychain.
+Connection tests compose these concrete types. No networking protocols, generic
+repositories, containers, or dependency frameworks are introduced.
+
+The unhosted test bundle compiles the same three authentication source files rather
+than launching `PingitApp`; tests cannot trigger startup credential restoration or
+real network requests. Provisioned Keychain access and visual interactions require
+a manual pass with a signed app. Xcode test action entitlement injection is checked
+separately from ordinary Debug/Release product entitlements.
+
+## Future boundaries
+
+Only Phases 1 and 2 are implemented. PR/review data belongs outside views, using
+asynchronous calls with cancellation, pagination, and rate-limit handling. Future
+repository permissions must be documented separately; successful account validation
+must never imply that those permissions exist. Polling and notifications belong
+outside view lifetimes and must stop on disconnect/quit. Preferences, repository
+selection, multiple accounts, OAuth, and packaging are out of this phase.
+
+Work stays on `main` in small local commits. Distribution, notarization, store
+assets, and packaging remain Phase 8 work.
 
 ## Platform references
 
@@ -50,3 +90,6 @@ Phase 1.
 - [Open Settings action](https://developer.apple.com/documentation/swiftui/environmentvalues/opensettings)
 - [LSUIElement](https://developer.apple.com/documentation/bundleresources/information-property-list/lsuielement)
 - [App Sandbox](https://developer.apple.com/documentation/security/app-sandbox)
+- [macOS Keychain implementations/signing](https://developer.apple.com/documentation/technotes/tn3137-on-mac-keychains)
+- [Data Protection Keychain](https://developer.apple.com/documentation/security/ksecusedataprotectionkeychain)
+- [Authenticated GitHub user](https://docs.github.com/en/rest/users/users#get-the-authenticated-user)

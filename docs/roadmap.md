@@ -1,6 +1,6 @@
 # Development roadmap
 
-Only Phase 1 is implemented. Later phases describe planned scope, not existing
+Phases 1 and 2 are implemented. Phases 3–8 describe planned scope, not existing
 features. Keep each phase independently buildable and validate before moving on.
 
 ## 1. Project foundation
@@ -12,18 +12,24 @@ features. Keep each phase independently buildable and validate before moving on.
 - Acceptance: build succeeds; validate the signed bundle and manually verify
   launch, Settings reopening, light/dark appearance, and clean quit.
 
-## 2. GitHub authentication
+## 2. GitHub authentication — implemented
 
-- Choose a GitHub authentication flow compatible with sandboxed macOS apps.
-- Use minimal scopes, store credentials in Keychain, and provide disconnect.
-- Acceptance: connection succeeds, cancellation/failure is recoverable, credentials
-  never appear in logs or plain-text storage, and disconnect removes credentials.
-- Test credential handling and connection state transitions before integration.
+- Single GitHub.com account using a personal access token and authenticated `GET /user`.
+- Secure Settings input, username/avatar, shared menu bar status, and disconnect.
+- No additional fine-grained permissions; no write/private repository access requested.
+- Provisioned app-specific Data Protection Keychain storage, startup restoration,
+  explicit retry, sanitized failures, and deletion on disconnect/invalid saved token.
+- Outbound sandbox networking; no file/server/temporary entitlements or ATS overrides.
+- Mocked client/Keychain/lifecycle tests; Debug and universal Release validation.
+- Real Keychain and visual acceptance require a development-team-signed app and
+  the manual checklist in README. Ad hoc builds support UI inspection/mocked tests.
+- No PR fetching, review tracking, OAuth, polling, or notifications in this phase.
 
 ## 3. GitHub data access and pull requests
 
 - Add asynchronous GitHub access for review requests and the user's open PRs.
-- Enable outbound networking only when this phase needs it.
+- Reuse the authenticated client and existing outbound network entitlement; add
+  only the repository read permissions needed, explaining organization approval.
 - Acceptance: real PRs load; empty, loading, error, pagination, expired-auth, and
   rate-limit states behave correctly. Refresh performs a user-initiated update.
 
