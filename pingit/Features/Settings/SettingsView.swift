@@ -33,7 +33,8 @@ struct GitHubConnectionControls: View {
     @State private var replacing: UUID?
     @State private var removing: GitHubTokenConnection?
     @State private var submission: Task<Void, Never>?
-    @FocusState private var isTokenFocused: Bool
+    private enum Field: Hashable { case owner, token }
+    @FocusState private var focusedField: Field?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -53,7 +54,7 @@ struct GitHubConnectionControls: View {
                             owner = row.resourceOwner
                             isAdding = true
                             token = ""
-                            isTokenFocused = true
+                            focusedField = .token
                         }
                         .accessibilityLabel("Replace token for \(row.resourceOwner)")
                         Button("Remove", role: .destructive) { removing = row }
@@ -71,22 +72,42 @@ struct GitHubConnectionControls: View {
                     owner = ""
                     token = ""
                     isAdding = true
-                    isTokenFocused = true
+                    focusedField = .owner
                 }
                 .disabled(connection.isConnecting)
                 .accessibilityIdentifier("github.token.add")
             } else {
-                TextField("Resource owner (personal username or organization)", text: $owner)
-                    .accessibilityIdentifier("github.token.owner")
-                    .disabled(connection.isConnecting)
-                SecureField("Personal access token", text: $token)
-                    .textContentType(.password)
-                    .focused($isTokenFocused)
-                    .onSubmit { connect() }
-                    .accessibilityIdentifier("github.token.secret")
-                    .disabled(connection.isConnecting)
-                Text("Resource owner is your label; pingit cannot verify the token’s owner or full repository access.")
-                    .font(.caption).foregroundStyle(.secondary)
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Resource owner (required)")
+                        .font(.headline)
+                    TextField("For example, apify or birosrichard", text: $owner)
+                        .labelsHidden()
+                        .textFieldStyle(.roundedBorder)
+                        .controlSize(.large)
+                        .focused($focusedField, equals: .owner)
+                        .onSubmit { focusedField = .token }
+                        .accessibilityLabel("Resource owner, required")
+                        .accessibilityHint("Enter the personal username or organization chosen for this token.")
+                        .accessibilityIdentifier("github.token.owner")
+                        .disabled(connection.isConnecting)
+                    Text("Personal username or organization selected when creating the token. This label does not verify repository access.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Personal access token (required)")
+                        .font(.headline)
+                    SecureField("Paste your GitHub token", text: $token)
+                        .labelsHidden()
+                        .textFieldStyle(.roundedBorder)
+                        .controlSize(.large)
+                        .textContentType(.password)
+                        .focused($focusedField, equals: .token)
+                        .onSubmit { connect() }
+                        .accessibilityLabel("Personal access token, required")
+                        .accessibilityIdentifier("github.token.secret")
+                        .disabled(connection.isConnecting)
+                }
                 HStack {
                     Button(replacing == nil ? "Validate and add" : "Validate and replace") { connect() }
                         .disabled(token.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
