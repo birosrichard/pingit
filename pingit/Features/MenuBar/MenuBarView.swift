@@ -11,9 +11,9 @@ struct MenuBarView: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack(spacing: 10) {
-                Image(systemName: "bell.badge")
-                    .font(.title2)
-                    .foregroundStyle(.tint)
+                Image("PingitMark")
+                    .resizable()
+                    .frame(width: 32, height: 32)
                     .accessibilityHidden(true)
 
                 Text("pingit")

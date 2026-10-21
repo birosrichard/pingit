@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		AA1000000000000000000001 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = AA2000000000000000000001 /* Assets.xcassets */; };
 		A10000000000000000000001 /* PingitApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000001 /* PingitApp.swift */; };
 		A10000000000000000000002 /* MenuBarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000006 /* MenuBarView.swift */; };
 		A10000000000000000000003 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000007 /* SettingsView.swift */; };
@@ -36,6 +37,7 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		AA2000000000000000000001 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		A20000000000000000000001 /* PingitApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PingitApp.swift; sourceTree = "<group>"; };
 		A20000000000000000000002 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		A20000000000000000000003 /* pingit.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = pingit.entitlements; sourceTree = "<group>"; };
@@ -112,6 +114,7 @@
 		A40000000000000000000004 /* Resources */ = {
 			isa = PBXGroup;
 			children = (
+				AA2000000000000000000001 /* Assets.xcassets */,
 				A20000000000000000000002 /* Info.plist */,
 				A20000000000000000000003 /* pingit.entitlements */,
 			);
@@ -273,6 +276,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				AA1000000000000000000001 /* Assets.xcassets in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

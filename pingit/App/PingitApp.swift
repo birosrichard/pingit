@@ -11,10 +11,13 @@ struct PingitApp: App {
     }
 
     var body: some Scene {
-        MenuBarExtra(connection.account == nil ? "pingit — Not connected" : "pingit — Connected",
-                     systemImage: connection.account == nil ? "bell.slash" : "bell") {
+        MenuBarExtra {
             MenuBarView()
                 .environment(connection)
+        } label: {
+            Image("MenuBarIcon")
+                .renderingMode(.template)
+                .accessibilityLabel(connection.account == nil ? "pingit — Not connected" : "pingit — Connected")
         }
         .menuBarExtraStyle(.window)
 
