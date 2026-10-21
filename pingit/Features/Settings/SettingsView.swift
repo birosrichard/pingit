@@ -45,9 +45,14 @@ struct GitHubConnectionControls: View {
             }
             ForEach(connection.connections) { row in
                 VStack(alignment: .leading, spacing: 6) {
-                    Text(row.resourceOwner).font(.headline)
-                    Text(row.account.map { "@\($0.login)" } ?? "Identity needs validation")
-                    Text(row.status).font(.caption).foregroundStyle(.secondary)
+                    HStack(spacing: 10) {
+                        GitHubOwnerAvatar(owner: row.resourceOwner, size: 36)
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(row.resourceOwner).font(.headline)
+                            Text(row.account.map { "@\($0.login)" } ?? "Identity needs validation")
+                            Text(row.status).font(.caption).foregroundStyle(.secondary)
+                        }
+                    }
                     HStack {
                         Button("Replace token") {
                             replacing = row.id

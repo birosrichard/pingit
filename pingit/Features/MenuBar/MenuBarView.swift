@@ -240,33 +240,36 @@ private struct PullRequestRow: View {
     }
 
     private var content: some View {
-        VStack(alignment: .leading, spacing: 5) {
-            Text(pr.title)
-                .font(.system(.body, weight: .medium))
-                .lineLimit(2)
-                .truncationMode(.tail)
-                .multilineTextAlignment(.leading)
-            Text("\(pr.repository.nameWithOwner) #\(String(pr.number))")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-                .truncationMode(.middle)
-            HStack(spacing: 8) {
-                if pr.isDraft { Text("Draft") }
-                if showsAuthor {
-                    Text(pr.authorLogin.map { "by @\($0)" } ?? "Author unavailable")
-                        .lineLimit(1)
-                } else {
-                    Label(reviewLabel, systemImage: reviewSymbol)
-                        .help("GitHub’s review decision. Approval alone does not establish merge readiness.")
-                }
-            }
-            .font(.caption)
-            .foregroundStyle(.secondary)
-            if pr.browserURL == nil {
-                Label("GitHub link unavailable", systemImage: "link.badge.plus")
+        HStack(alignment: .top, spacing: 10) {
+            GitHubOwnerAvatar(owner: pr.repository.ownerLogin, size: 28)
+            VStack(alignment: .leading, spacing: 5) {
+                Text(pr.title)
+                    .font(.system(.body, weight: .medium))
+                    .lineLimit(2)
+                    .truncationMode(.tail)
+                    .multilineTextAlignment(.leading)
+                Text("\(pr.repository.nameWithOwner) #\(String(pr.number))")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                HStack(spacing: 8) {
+                    if pr.isDraft { Text("Draft") }
+                    if showsAuthor {
+                        Text(pr.authorLogin.map { "by @\($0)" } ?? "Author unavailable")
+                            .lineLimit(1)
+                    } else {
+                        Label(reviewLabel, systemImage: reviewSymbol)
+                            .help("GitHub’s review decision. Approval alone does not establish merge readiness.")
+                    }
+                }
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                if pr.browserURL == nil {
+                    Label("GitHub link unavailable", systemImage: "link.badge.plus")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)

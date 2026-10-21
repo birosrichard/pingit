@@ -5,6 +5,25 @@ struct GitHubRepository: Codable, Equatable, Sendable, Identifiable {
     let id: String
     let nameWithOwner: String
     let url: URL
+
+    var ownerLogin: String? {
+        let parts = nameWithOwner.split(separator: "/", omittingEmptySubsequences: false)
+        guard parts.count == 2, !parts[1].isEmpty else { return nil }
+        return String(parts[0])
+    }
+}
+
+// Public profile images need no credential and never establish token ownership/access.
+enum GitHubAvatar {
+    static func url(for login: String?) -> URL? {
+        guard let login, (1...39).contains(login.utf8.count),
+              login.first != "-", login.last != "-",
+              login.utf8.allSatisfy({
+                  (48...57).contains($0) || (65...90).contains($0)
+                      || (97...122).contains($0) || $0 == 45
+              }) else { return nil }
+        return URL(string: "https://github.com/\(login).png?size=80")
+    }
 }
 
 struct GitHubPullRequest: Codable, Equatable, Sendable, Identifiable {

@@ -92,3 +92,31 @@ struct GitHubPullRequestTests {
                           reviewStatus: nil, latestReviews: nil, checkStatus: nil, reviewRequests: nil)
     }
 }
+
+extension GitHubPullRequestTests {
+    @Test(arguments: ["apify", "birosrichard", "some-owner", "Octocat"])
+    func publicOwnerAvatarURL(login: String) {
+        let url = GitHubAvatar.url(for: login)
+        #expect(url?.scheme == "https")
+        #expect(url?.host == "github.com")
+        #expect(url?.path == "/\(login).png")
+        #expect(url?.query == "size=80")
+        #expect(url?.user == nil && url?.password == nil)
+    }
+
+    @Test(arguments: [nil, "", "Legacy token", "../apify", "apify/repo", "https://example.com", "apify?token=x",
+                      "apify#fragment", "apify@example.com", "-apify", "apify-", "ápify", String(repeating: "a", count: 40)] as [String?])
+    func invalidOwnerLabelsUsePlaceholder(login: String?) {
+        #expect(GitHubAvatar.url(for: login) == nil)
+    }
+
+    @Test func repositoryAvatarUsesRepositoryOwnerRatherThanAuthor() {
+        let repository = GitHubRepository(id: "repo", nameWithOwner: "apify/apify-web", url: URL(string: "https://github.com/apify/apify-web")!)
+        #expect(repository.ownerLogin == "apify")
+        #expect(GitHubAvatar.url(for: repository.ownerLogin)?.path == "/apify.png")
+        for invalid in ["apify", "apify/", "/repo", "apify/repo/extra"] {
+            let value = GitHubRepository(id: "repo", nameWithOwner: invalid, url: repository.url)
+            #expect(GitHubAvatar.url(for: value.ownerLogin) == nil)
+        }
+    }
+}

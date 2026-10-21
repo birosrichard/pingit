@@ -89,6 +89,10 @@ or expired saved tokens remain available for explicit replacement/removal. Offli
 permission and rate-limit failures also retain credentials. **Retry saved connections**
 revalidates without automatically retrying repeatedly.
 
+Settings shows the configured owner’s public GitHub avatar. Pull request rows show
+the repository owner’s avatar. Images load without a token and fall back to a
+generic icon when unavailable; an avatar does not verify token access.
+
 See [multi-token storage, merge policy, validation and manual checks](docs/tokens.md).
 
 ## Security

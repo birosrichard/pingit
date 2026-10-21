@@ -28,3 +28,26 @@ struct GitHubAccountView: View {
         }
     }
 }
+
+
+struct GitHubOwnerAvatar: View {
+    let owner: String?
+    var size: CGFloat = 32
+
+    var body: some View {
+        // This public request is independent of the authenticated GitHub client.
+        AsyncImage(url: GitHubAvatar.url(for: owner)) { phase in
+            if case .success(let image) = phase {
+                image.resizable().scaledToFill()
+            } else {
+                Image(systemName: "person.crop.circle.fill")
+                    .resizable()
+                    .scaledToFit()
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .frame(width: size, height: size)
+        .clipShape(RoundedRectangle(cornerRadius: size / 4))
+        .accessibilityHidden(true)
+    }
+}
