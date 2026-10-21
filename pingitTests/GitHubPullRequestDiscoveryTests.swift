@@ -42,7 +42,7 @@ struct GitHubPullRequestDiscoveryTests {
         #expect(pr.reviewStatus == .unknown && pr.checkStatus == .unknown && pr.reviewRequests == nil)
         #expect(pr.latestReviews == GitHubLatestReviews(reviews: [], limitations: []))
         #expect(!result.isTruncated)
-        #expect(result.coverageLimitations == [.tokenVisibility])
+        #expect(result.coverageLimitations == [.tokenVisibility, .checkDataUnavailable])
     }
 
     @Test(arguments: ["APPROVED", "CHANGES_REQUESTED", "REVIEW_REQUIRED", "UNSUPPORTED", "", nil] as [String?])
@@ -505,10 +505,12 @@ struct GitHubPullRequestDiscoveryTests {
     }
 
     @Test func deniedCheckFieldsPreservePRAndDiffButDiscardTheWholeRollup() async throws {
-        for field in ["state", "contexts"] {
+        for suffix: [Any] in [[], ["nodes", 0], ["nodes", 0, "commit", "oid"],
+                              ["nodes", 0, "commit", "statusCheckRollup", "state"],
+                              ["nodes", 0, "commit", "statusCheckRollup", "contexts"]] {
             var envelope = try #require(try JSONSerialization.jsonObject(with: Data(payload([checkedNode()]).utf8)) as? [String: Any])
             envelope["errors"] = [["message": "Resource not accessible by integration", "type": "FORBIDDEN",
-                                   "path": ["search", "nodes", 0, "commits", "nodes", 0, "commit", "statusCheckRollup", field]]]
+                                   "path": ["search", "nodes", 0, "commits"] + suffix]]
             let body = String(decoding: try JSONSerialization.data(withJSONObject: envelope), as: UTF8.self)
             let script = Script([body])
             let result = try await authored(script.http)
@@ -517,6 +519,15 @@ struct GitHubPullRequestDiscoveryTests {
             #expect(result.pullRequests.first?.diffStatistics?.additions == 2)
             #expect(script.requests.count == 1)
         }
+    }
+
+    @Test func nullRollupIsUnavailableRatherThanNoChecks() async throws {
+        var value = checkedNode()
+        value["commits"] = ["nodes": [["commit": ["oid": "head", "statusCheckRollup": NSNull()]]]]
+        let result = try await authored(Script([payload([value])]).http)
+        #expect(result.pullRequests.first?.checkStatus == .unknown)
+        #expect(result.coverageLimitations.contains(.checkDataUnavailable))
+        #expect(PullRequestSectionState(phase: .loaded, result: result).coverageMessages.contains { $0.contains("CI data") })
     }
 
     @Test func unrelatedGraphQLErrorsAndRateLimitsStillFailTheSource() async throws {

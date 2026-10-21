@@ -130,7 +130,7 @@ struct MenuBarView: View {
                 ScrollView {
                     LazyVStack(spacing: 0) {
                         ForEach(pullRequests) { pr in
-                            PullRequestRow(pr: pr, showsAuthor: selection == .review)
+                            PullRequestRow(pr: pr, showsAuthor: selection == .review, isPrevious: state.phase != .loaded)
                             if pr.id != pullRequests.last?.id {
                                 Divider().padding(.leading, 58).padding(.trailing, 12)
                             }
@@ -139,7 +139,7 @@ struct MenuBarView: View {
                     .padding(.horizontal, 8)
                     .padding(.bottom, 6)
                 }
-                .frame(height: min(360, CGFloat(pullRequests.count) * 108 + 6))
+                .frame(height: min(360, CGFloat(pullRequests.count) * 126 + 6))
             }
         }
         .background(Color(nsColor: .controlBackgroundColor))
@@ -289,6 +289,10 @@ struct MenuBarView: View {
 private struct PullRequestRow: View {
     let pr: GitHubPullRequest
     let showsAuthor: Bool
+    let isPrevious: Bool
+    private var checkDisplay: PullRequestCheckPresentation {
+        .init(snapshot: pr.currentChecks, isPrevious: isPrevious)
+    }
     @State private var isHovered = false
 
     var body: some View {
@@ -296,7 +300,7 @@ private struct PullRequestRow: View {
             if let url = pr.browserURL {
                 Link(destination: url) { content }
                     .buttonStyle(.plain)
-                    .help("\(pr.title)\n\(pr.repository.nameWithOwner) #\(pr.number)\n\(showsAuthor ? "Open on GitHub" : pr.reviewPresentation.detail)")
+                    .help("\(pr.title)\n\(pr.repository.nameWithOwner) #\(pr.number)\n\(pr.reviewPresentation.detail)\n\(pr.diffStatistics?.accessibilityLabel ?? "Diff statistics unavailable")\n\(checkDisplay.detail)")
             } else {
                 content.help("This pull request has an invalid GitHub URL.")
             }
@@ -332,6 +336,19 @@ private struct PullRequestRow: View {
                     VStack(alignment: .leading, spacing: 4) { metadata }
                 }
                 .font(.system(size: 12))
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: 8) {
+                        diffMetadata
+                        Text("·").foregroundStyle(.tertiary).accessibilityHidden(true)
+                        checkMetadata
+                    }
+                    .fixedSize(horizontal: true, vertical: false)
+                    VStack(alignment: .leading, spacing: 4) {
+                        diffMetadata
+                        checkMetadata
+                    }
+                }
+                .font(.system(size: 11))
                 if pr.browserURL == nil {
                     Label("GitHub link unavailable", systemImage: "link")
                         .font(.caption).foregroundStyle(.secondary)
@@ -346,7 +363,7 @@ private struct PullRequestRow: View {
                     in: RoundedRectangle(cornerRadius: 6))
     }
 
-    private func reviewColor(_ tone: PullRequestReviewPresentation.Tone) -> Color {
+    private func metadataColor(_ tone: PullRequestReviewPresentation.Tone) -> Color {
         switch tone {
         case .neutral: .secondary
         case .positive: .green
@@ -365,20 +382,35 @@ private struct PullRequestRow: View {
         } else {
             let display = pr.reviewPresentation
             Label(display.label, systemImage: display.systemImage)
-                .foregroundStyle(reviewColor(display.tone))
+                .foregroundStyle(metadataColor(display.tone))
                 .help(display.detail)
                 .accessibilityLabel("\(display.label). \(display.detail)")
         }
-        // CI is independent of the review decision; nil means it was not fetched.
-        switch pr.checkStatus {
-        case .success:
-            Label("Checks passing", systemImage: "checkmark.seal.fill").foregroundStyle(.green)
-        case .failure:
-            Label("Checks failing", systemImage: "xmark.circle.fill").foregroundStyle(.red)
-        case .pending:
-            Label("Checks pending", systemImage: "clock").foregroundStyle(.orange)
-        case .cancelled, .skipped, .noChecks, .unknown, nil:
-            EmptyView()
+    }
+
+    @ViewBuilder private var diffMetadata: some View {
+        if let diff = pr.diffStatistics {
+            HStack(spacing: 6) {
+                Text(diff.filesLabel).foregroundStyle(.secondary)
+                Text(diff.additionsLabel).foregroundStyle(.green)
+                Text(diff.deletionsLabel).foregroundStyle(.red)
+            }
+            .monospacedDigit()
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(diff.accessibilityLabel)
+            .help(diff.accessibilityLabel)
+        } else {
+            Text("Diff unavailable").foregroundStyle(.secondary)
+                .accessibilityLabel("Diff statistics unavailable")
         }
+    }
+
+    private var checkMetadata: some View {
+        Label(checkDisplay.label, systemImage: checkDisplay.systemImage)
+            .foregroundStyle(metadataColor(checkDisplay.tone))
+            .lineLimit(1)
+            .truncationMode(.tail)
+            .help(checkDisplay.detail)
+            .accessibilityLabel("\(checkDisplay.label). \(checkDisplay.detail)")
     }
 }

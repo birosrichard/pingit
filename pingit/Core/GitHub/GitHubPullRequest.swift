@@ -252,3 +252,56 @@ extension GitHubCheckSnapshot {
                      detailsComplete: false, limitation: .conflicting), true)
     }
 }
+
+struct PullRequestCheckPresentation: Equatable {
+    let label: String
+    let systemImage: String
+    let tone: PullRequestReviewPresentation.Tone
+    let detail: String
+
+    init(snapshot: GitHubCheckSnapshot?, isPrevious: Bool = false) {
+        let status = snapshot?.detailsComplete != true && (snapshot?.status == .success || snapshot?.status == .noChecks)
+            ? .unknown : snapshot?.status ?? .unknown
+        let text: String
+        var color: PullRequestReviewPresentation.Tone
+        switch status {
+        case .success:
+            text = "Checks passed"; systemImage = "checkmark.circle.fill"; color = .positive
+        case .failure:
+            if snapshot?.detailsComplete == true, let count = snapshot?.failingCount, count > 0 {
+                text = "\(count) failing \(count == 1 ? "check" : "checks")"
+            } else {
+                text = "Checks failing"
+            }
+            systemImage = "xmark.circle.fill"; color = .negative
+        case .pending:
+            text = "Checks running"; systemImage = "clock"; color = .caution
+        case .cancelled:
+            text = "Checks cancelled"; systemImage = "stop.circle"; color = .neutral
+        case .skipped:
+            text = "Checks skipped / neutral"; systemImage = "minus.circle"; color = .neutral
+        case .noChecks:
+            text = "No checks"; systemImage = "circle.dashed"; color = .neutral
+        case .unknown:
+            text = "Checks unavailable"; systemImage = "questionmark.circle"; color = .neutral
+        }
+        label = isPrevious && status != .unknown ? "Previous: \(text.lowercased())" : text
+        if isPrevious { color = .neutral }
+        tone = color
+        var explanation = "GitHub Checks and legacy commit statuses for this PR head."
+        if isPrevious { explanation += " Previous snapshot; refresh is in progress or failed." }
+        switch snapshot?.limitation {
+        case .unavailable:
+            explanation += " CI data is unavailable; token access or GitHub’s fine-grained PAT limitations may prevent retrieval."
+        case .headMismatch:
+            explanation += " The returned commit does not match the PR head; its checks are withheld."
+        case .conflicting:
+            explanation += " Token observations disagree; exact counts and successful conclusions are withheld."
+        case .incomplete, .unknownState:
+            explanation += " CI details are incomplete or contain an unsupported state; exact counts are unavailable."
+        case nil:
+            if snapshot == nil { explanation += " CI data is unavailable." }
+        }
+        detail = explanation + " Reviews, conflicts and branch protection may still block merging. This does not establish merge readiness."
+    }
+}

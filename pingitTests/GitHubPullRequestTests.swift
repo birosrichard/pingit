@@ -405,3 +405,56 @@ struct PullRequestCheckMergeTests {
         #expect(value.currentChecks?.limitation == .headMismatch)
     }
 }
+
+struct PullRequestCheckPresentationTests {
+    private func snapshot(_ status: GitHubCheckStatus, count: Int? = nil,
+                          complete: Bool = true) -> GitHubCheckSnapshot {
+        .init(headOid: "head", status: status, failingCount: count, detailsComplete: complete,
+              limitation: complete ? nil : .incomplete)
+    }
+
+    @Test(arguments: [
+        (GitHubCheckStatus.success, "Checks passed", "checkmark.circle.fill"),
+        (.failure, "Checks failing", "xmark.circle.fill"),
+        (.pending, "Checks running", "clock"),
+        (.cancelled, "Checks cancelled", "stop.circle"),
+        (.skipped, "Checks skipped / neutral", "minus.circle"),
+        (.noChecks, "No checks", "circle.dashed"),
+        (.unknown, "Checks unavailable", "questionmark.circle")
+    ])
+    func labelsIconsAndVoiceOverNeverClaimMergeReadiness(status: GitHubCheckStatus, label: String, icon: String) {
+        let display = PullRequestCheckPresentation(snapshot: snapshot(status))
+        #expect(display.label == label && display.systemImage == icon)
+        #expect(!display.label.lowercased().contains("ready"))
+        #expect(display.detail.contains("Reviews, conflicts and branch protection may still block merging"))
+        #expect(display.detail.contains("does not establish merge readiness"))
+    }
+
+    @Test func exactFailureCountsRequireCompleteEvidence() {
+        #expect(PullRequestCheckPresentation(snapshot: snapshot(.failure, count: 1)).label == "1 failing check")
+        #expect(PullRequestCheckPresentation(snapshot: snapshot(.failure, count: 2)).label == "2 failing checks")
+        #expect(PullRequestCheckPresentation(snapshot: snapshot(.failure, count: 2, complete: false)).label == "Checks failing")
+        #expect(PullRequestCheckPresentation(snapshot: snapshot(.failure, count: 0)).label == "Checks failing")
+    }
+
+    @Test func previousAndUnavailableResultsCannotLookLikeCurrentSuccess() {
+        let previous = PullRequestCheckPresentation(snapshot: snapshot(.success), isPrevious: true)
+        #expect(previous.label == "Previous: checks passed" && previous.tone == .neutral)
+        #expect(previous.detail.contains("Previous snapshot"))
+        #expect(PullRequestCheckPresentation(snapshot: nil).label == "Checks unavailable")
+        for status in [GitHubCheckStatus.success, .noChecks] {
+            let incomplete = PullRequestCheckPresentation(snapshot: snapshot(status, complete: false))
+            #expect(incomplete.label == "Checks unavailable" && incomplete.tone == .neutral)
+        }
+        #expect(PullRequestCheckPresentation(snapshot: .unavailable(headOid: "head")).detail.contains("token access"))
+    }
+
+    @Test func CIAndReviewDecisionsRemainIndependent() {
+        let review = PullRequestReviewPresentation(status: .reviewRequired, reviews: nil)
+        let passing = PullRequestCheckPresentation(snapshot: snapshot(.success))
+        #expect(review.label == "Review required" && passing.label == "Checks passed")
+        let approval = PullRequestReviewPresentation(status: .approved, reviews: nil)
+        let failing = PullRequestCheckPresentation(snapshot: snapshot(.failure))
+        #expect(approval.label == "Approved" && failing.label == "Checks failing")
+    }
+}
