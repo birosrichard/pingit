@@ -64,3 +64,63 @@ final class NativeNotificationService: NotificationService {
         }
     }
 }
+
+// Notification payloads are untrusted again at activation, including after a cold launch.
+enum GitHubNotificationURL {
+    static func validate(_ string: String) -> URL? {
+        guard string.utf8.count <= 2048, let parts = URLComponents(string: string),
+              parts.scheme == "https", parts.host == "github.com",
+              parts.user == nil, parts.password == nil, parts.port == nil,
+              parts.query == nil, parts.fragment == nil,
+              parts.percentEncodedPath == parts.path else { return nil }
+        let path = parts.path.split(separator: "/", omittingEmptySubsequences: false)
+        guard path.count == 5, path[0].isEmpty,
+              validComponent(path[1], repository: false), validComponent(path[2], repository: true),
+              path[3] == "pull", let number = Int(path[4]), number > 0,
+              path[4] == Substring(String(number)),
+              string == "https://github.com/\(path[1])/\(path[2])/pull/\(number)" else { return nil }
+        return parts.url
+    }
+
+    private static func validComponent(_ value: Substring, repository: Bool) -> Bool {
+        guard !value.isEmpty, value != ".", value != ".." else { return false }
+        return value.utf8.allSatisfy {
+            (65...90).contains($0) || (97...122).contains($0) || (48...57).contains($0)
+                || $0 == 45 || (repository && ($0 == 46 || $0 == 95))
+        }
+    }
+}
+
+extension NotificationMessage {
+    init?(event: PullRequestChangeEvent, sound: Bool) {
+        guard !event.id.isEmpty, !event.pullRequestID.isEmpty, event.number > 0,
+              let url = GitHubNotificationURL.validate(event.url.absoluteString),
+              url.path == "/\(event.repository.nameWithOwner)/pull/\(event.number)" else { return nil }
+        identifier = "pingit.change.\(changeDigest(event.id))"
+        threadIdentifier = "pingit.pr.\(changeDigest(event.pullRequestID))"
+        title = switch event.kind {
+        case .reviewRequested: "Review requested"
+        case .reviewRequestRemoved: "Review request removed"
+        case .approved: "Pull request approved"
+        case .changesRequested: "Changes requested"
+        case .readyForReview: "Ready for review"
+        }
+        subtitle = "\(event.repository.nameWithOwner) #\(event.number)"
+        let prTitle = Self.text(event.title, limit: 180)
+        let actor = Self.text(event.actorLogin, limit: 80)
+        let context = prTitle.isEmpty ? "Pull request #\(event.number)" : prTitle
+        body = actor.isEmpty ? context : "\(context) — @\(actor)"
+        pullRequestURL = url.absoluteString
+        self.sound = sound
+    }
+
+    private static func text(_ value: String?, limit: Int) -> String {
+        let clean = (value ?? "").unicodeScalars.map { scalar -> String in
+            switch scalar.properties.generalCategory {
+            case .control, .format, .lineSeparator, .paragraphSeparator: " "
+            default: String(scalar)
+            }
+        }.joined().split(whereSeparator: \.isWhitespace).joined(separator: " ")
+        return clean.count > limit ? String(clean.prefix(limit)) + "…" : clean
+    }
+}
