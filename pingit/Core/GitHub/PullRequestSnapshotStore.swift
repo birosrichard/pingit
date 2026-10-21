@@ -16,6 +16,7 @@ struct PullRequestSnapshotStore: Sendable {
 
     init(url: URL = Self.applicationURL) {
         read = {
+            try Self.removeOrphanedWrites(in: url.deletingLastPathComponent())
             guard FileManager.default.fileExists(atPath: url.path) else { return nil }
             let values = try url.resourceValues(forKeys: [.fileSizeKey, .isRegularFileKey, .isSymbolicLinkKey])
             guard values.isRegularFile == true, values.isSymbolicLink != true,
@@ -72,6 +73,7 @@ struct PullRequestSnapshotStore: Sendable {
         try manager.createDirectory(at: directory, withIntermediateDirectories: true,
                                     attributes: [.posixPermissions: 0o700])
         try manager.setAttributes([.posixPermissions: 0o700], ofItemAtPath: directory.path)
+        try removeOrphanedWrites(in: directory)
         let temporary = directory.appendingPathComponent(UUID().uuidString + ".tmp")
         guard manager.createFile(atPath: temporary.path, contents: nil, attributes: [.posixPermissions: 0o600]) else {
             throw Failure.unavailable
@@ -87,5 +89,13 @@ struct PullRequestSnapshotStore: Sendable {
             throw error
         }
         guard rename(temporary.path, url.path) == 0 else { throw Failure.unavailable }
+    }
+
+    private static func removeOrphanedWrites(in directory: URL) throws {
+        guard FileManager.default.fileExists(atPath: directory.path) else { return }
+        for file in try FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)
+            where file.pathExtension == "tmp" && UUID(uuidString: file.deletingPathExtension().lastPathComponent) != nil {
+            try FileManager.default.removeItem(at: file)
+        }
     }
 }

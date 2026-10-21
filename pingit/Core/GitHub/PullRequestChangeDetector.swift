@@ -39,17 +39,12 @@ actor PullRequestChangeDetector {
             for scope in input.scopes {
                 guard let sections = input.results[scope.id] else { continue }
                 var source = next.sources[scope.id] ?? .init()
+                let visible = repositoryIDs(sections)
                 if let result = complete(sections.authored) {
-                    source.authored = projected(result, previous: source.authored)
+                    source.authored = projected(result, previous: source.authored, visibleRepositories: visible)
                 }
                 if let result = complete(sections.requested) {
-                    var requested = projected(result, previous: source.requested)
-                    let visible = repositoryIDs(sections)
-                    // A successful empty search cannot prove access to a disappeared repository.
-                    for (id, pr) in source.requested ?? [:] where requested[id] == nil && !visible.contains(pr.repositoryID) {
-                        requested[id] = pr
-                    }
-                    source.requested = requested
+                    source.requested = projected(result, previous: source.requested, visibleRepositories: visible)
                 }
                 if source.authored != nil || source.requested != nil { next.sources[scope.id] = source }
             }
@@ -110,7 +105,8 @@ actor PullRequestChangeDetector {
     }
 
     private func projected(_ result: GitHubPullRequestDiscoveryResult,
-                           previous: [String: PullRequestChangeSnapshot.PullRequest]?) -> [String: PullRequestChangeSnapshot.PullRequest] {
+                           previous: [String: PullRequestChangeSnapshot.PullRequest]?,
+                           visibleRepositories: Set<String>) -> [String: PullRequestChangeSnapshot.PullRequest] {
         var values: [String: PullRequestChangeSnapshot.PullRequest] = [:]
         for pr in result.pullRequests {
             var value = PullRequestChangeSnapshot.PullRequest(pr)
@@ -120,6 +116,10 @@ actor PullRequestChangeDetector {
                 if !value.reviewsComplete { value.reviewers = old.reviewers }
             }
             values[pr.id] = value
+        }
+        // An empty search cannot prove continued access to an absent repository, in either section.
+        for (id, pr) in previous ?? [:] where values[id] == nil && !visibleRepositories.contains(pr.repositoryID) {
+            values[id] = pr
         }
         return values
     }
@@ -188,10 +188,11 @@ actor PullRequestChangeDetector {
             if before.values.allSatisfy(\.isDraft), after.values.allSatisfy({ !$0.isDraft }) {
                 append(.readyForReview, id: id, state: current, scopes: scopes, signal: .draft, before: "draft", after: "ready")
             }
+            guard before.values.allSatisfy({ $0.decision == previous.decision }),
+                  after.values.allSatisfy({ $0.decision == current.decision }) else { continue }
             var overallKind: PullRequestChangeEvent.Kind?
             if let decision = previous.decision, decision != .unknown,
-               before.values.allSatisfy({ $0.decision == decision }),
-               after.values.allSatisfy({ $0.decision == current.decision }), current.decision != decision {
+               current.decision != decision {
                 if current.decision == .approved { overallKind = .approved }
                 if current.decision == .changesRequested { overallKind = .changesRequested }
             }
