@@ -16,6 +16,7 @@ struct GitHubPullRequest: Codable, Equatable, Sendable, Identifiable {
     // GitHub may no longer have an account for a deleted author.
     let authorLogin: String?
     let isDraft: Bool
+    let createdAt: Date
     let updatedAt: Date
     // nil means not loaded/available, rather than no reviews or successful CI.
     let reviewStatus: GitHubReviewStatus?
