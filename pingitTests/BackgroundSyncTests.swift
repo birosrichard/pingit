@@ -406,3 +406,20 @@ extension BackgroundSyncTests {
         #expect(dashboard.lastAttemptAt == attempt && !dashboard.isRefreshing)
     }
 }
+
+
+extension BackgroundSyncTests {
+    @Test func shutdownCancelsActiveRefreshAndClearsLoadingWithoutAcceptingLateData() async {
+        let f = SyncFixture()
+        f.hold = true
+        f.start()
+        await f.wait { f.calls.count == 2 }
+        f.dashboard.shutdown()
+        #expect(!f.dashboard.isLoading && f.dashboard.nextAutomaticRefresh == nil)
+        f.release()
+        for _ in 0..<50 { await Task.yield() }
+        #expect(f.dashboard.authored.result == nil && f.dashboard.lastSuccessfulRefreshAt == nil)
+        f.clock.advance(1000)
+        #expect(f.calls.count == 2)
+    }
+}

@@ -185,6 +185,7 @@ final class PullRequestDashboard {
         syncPreferences.onChange = nil
         scheduler.cancel()
         invalidateRefresh()
+        rebuild()
     }
 
     func systemWillSleep() {
