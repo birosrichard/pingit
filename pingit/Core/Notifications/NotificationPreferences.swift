@@ -4,13 +4,13 @@ import Observation
 @MainActor
 @Observable
 final class NotificationPreferences {
-    var enabled: Bool { didSet { save(enabled, key: "enabled") } }
-    var reviewRequested: Bool { didSet { save(reviewRequested, key: "reviewRequested") } }
-    var reviewRequestRemoved: Bool { didSet { save(reviewRequestRemoved, key: "reviewRequestRemoved") } }
-    var approved: Bool { didSet { save(approved, key: "approved") } }
-    var changesRequested: Bool { didSet { save(changesRequested, key: "changesRequested") } }
-    var readyForReview: Bool { didSet { save(readyForReview, key: "readyForReview") } }
-    var sound: Bool { didSet { save(sound, key: "sound") } }
+    var enabled: Bool { didSet { save(enabled, key: "enabled", previous: oldValue) } }
+    var reviewRequested: Bool { didSet { save(reviewRequested, key: "reviewRequested", previous: oldValue) } }
+    var reviewRequestRemoved: Bool { didSet { save(reviewRequestRemoved, key: "reviewRequestRemoved", previous: oldValue) } }
+    var approved: Bool { didSet { save(approved, key: "approved", previous: oldValue) } }
+    var changesRequested: Bool { didSet { save(changesRequested, key: "changesRequested", previous: oldValue) } }
+    var readyForReview: Bool { didSet { save(readyForReview, key: "readyForReview", previous: oldValue) } }
+    var sound: Bool { didSet { save(sound, key: "sound", previous: oldValue) } }
 
     @ObservationIgnored private let defaults: UserDefaults?
     @ObservationIgnored var onChange: (() -> Void)?
@@ -37,7 +37,8 @@ final class NotificationPreferences {
         }
     }
 
-    private func save(_ value: Bool, key: String) {
+    private func save(_ value: Bool, key: String, previous: Bool) {
+        guard value != previous else { return }
         defaults?.set(value, forKey: "notifications.\(key)")
         onChange?()
     }

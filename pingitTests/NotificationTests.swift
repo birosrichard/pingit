@@ -228,6 +228,14 @@ struct NotificationDeliveryTests {
         #expect(Set(f.service.delivered.map(\.threadIdentifier)).count == 1)
     }
 
+    @Test func differentPullRequestsHaveDifferentNotificationGroups() throws {
+        let f = NotificationFixture()
+        let first = try #require(NotificationMessage(event: try f.event(), sound: false))
+        let second = try #require(NotificationMessage(event: try f.event(id: "event-2", prID: "PR_2",
+            url: "https://github.com/owner/repository/pull/2", number: 2), sound: false))
+        #expect(first.threadIdentifier != second.threadIdentifier)
+    }
+
     @Test func missingTitleAndActorUseUsefulFallbacks() throws {
         let f = NotificationFixture()
         let message = try #require(NotificationMessage(event: try f.event(title: nil), sound: false))

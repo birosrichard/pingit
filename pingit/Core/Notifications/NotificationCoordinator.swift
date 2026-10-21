@@ -116,6 +116,7 @@ final class NotificationCoordinator {
     }
 
     func refreshAuthorization() async {
+        guard !stopped else { return }
         permissionGeneration += 1
         let generation = permissionGeneration
         let status = await service.authorizationStatus()
@@ -134,7 +135,10 @@ final class NotificationCoordinator {
         await refreshAuthorization()
         guard !stopped, !Task.isCancelled, permission == .notDetermined else { return }
         do { try await service.requestAuthorization() }
-        catch { errorMessage = "Couldn’t request notification permission. Try again in Settings." }
+        catch {
+            guard !stopped, !Task.isCancelled else { return }
+            errorMessage = "Couldn’t request notification permission. Try again in Settings."
+        }
         await refreshAuthorization()
     }
 }
