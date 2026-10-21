@@ -11,6 +11,8 @@ struct GitHubPullRequestDiscoveryResult: Equatable, Sendable {
         case resultLimit
         case searchLimit
         case reviewRequestLimit
+        case pageLimit
+        case invalidCursor
     }
 
     enum CoverageLimitation: Sendable {
@@ -43,13 +45,13 @@ struct GitHubPullRequestDiscovery: Sendable {
 
     // Supply the account validated by GitHubConnection and its existing Keychain token.
     func authoredPullRequests(
-        for account: GitHubAccount, token: String, maximumResults: Int = 50
+        for account: GitHubAccount, token: String, maximumResults: Int = 200
     ) async throws -> GitHubPullRequestDiscoveryResult {
         try await fetch(for: account, token: token, maximumResults: maximumResults, reviewRequests: false)
     }
 
     func reviewRequestedPullRequests(
-        for account: GitHubAccount, token: String, maximumResults: Int = 50
+        for account: GitHubAccount, token: String, maximumResults: Int = 200
     ) async throws -> GitHubPullRequestDiscoveryResult {
         try await fetch(for: account, token: token, maximumResults: maximumResults, reviewRequests: true)
     }
@@ -63,34 +65,61 @@ struct GitHubPullRequestDiscovery: Sendable {
         let filter = reviewRequests
             ? "user-review-requested:@me -author:\(login) draft:false"
             : "author:\(login)"
-        let variables = Variables(query: "is:pr is:open \(filter) sort:updated-desc",
-                                  first: min(50, maximumResults), after: nil, includeReviewRequests: reviewRequests)
-        let response: GitHubPullRequestSearchResponse = try await client.graphQL(
-            query: GitHubPullRequestSearchResponse.query, variables: variables, token: token)
-        guard response.viewer.login.caseInsensitiveCompare(login) == .orderedSame else {
-            throw GitHubDiscoveryError.accountMismatch
-        }
+        let query = "is:pr is:open \(filter) sort:updated-desc"
         var values: [GitHubPullRequest] = []
         var seen: Set<String> = []
+        var cursors: Set<String> = []
+        var cursor: String?
+        var scanned = 0
         var reasons: Set<GitHubPullRequestDiscoveryResult.TruncationReason> = []
-        for node in response.search.nodes {
+
+        // Bound requests independently of unique results: duplicates/stale search hits
+        // must not turn a small result limit into unlimited network activity.
+        for page in 1...20 {
             try Task.checkCancellation()
-            guard let node else { throw GitHubAPIError.missingData }
-            let pr = try node.domain()
-            guard node.state == .open else { continue }
-            if reviewRequests {
-                guard !pr.isDraft, pr.authorLogin?.caseInsensitiveCompare(login) != .orderedSame else { continue }
-                guard let requests = node.reviewRequests else { throw GitHubAPIError.partialData }
-                if requests.pageInfo.hasNextPage { reasons.insert(.reviewRequestLimit) }
-                // Search can lag behind a submitted/removed review request.
-                guard requests.contains(login: login) else { continue }
-            } else {
-                guard pr.authorLogin?.caseInsensitiveCompare(login) == .orderedSame else { continue }
+            let first = min(50, maximumResults - values.count, 1000 - scanned)
+            let variables = Variables(query: query, first: first, after: cursor, includeReviewRequests: reviewRequests)
+            let response: GitHubPullRequestSearchResponse = try await client.graphQL(
+                query: GitHubPullRequestSearchResponse.query, variables: variables, token: token)
+            guard response.viewer.login.caseInsensitiveCompare(login) == .orderedSame else {
+                throw GitHubDiscoveryError.accountMismatch
             }
-            if seen.insert(pr.id).inserted { values.append(pr) }
+            let search = response.search
+            guard search.issueCount >= 0, search.nodes.count <= first else { throw GitHubAPIError.unexpectedResponse }
+            scanned += search.nodes.count
+            if search.issueCount > 1000 { reasons.insert(.searchLimit) }
+            for node in search.nodes {
+                try Task.checkCancellation()
+                guard let node else { throw GitHubAPIError.missingData }
+                let pr = try node.domain()
+                guard node.state == .open else { continue }
+                if reviewRequests {
+                    guard !pr.isDraft, pr.authorLogin?.caseInsensitiveCompare(login) != .orderedSame else { continue }
+                    guard let requests = node.reviewRequests else { throw GitHubAPIError.partialData }
+                    if requests.pageInfo.hasNextPage { reasons.insert(.reviewRequestLimit) }
+                    // Search can lag behind a submitted/removed review request.
+                    guard requests.contains(login: login) else { continue }
+                } else {
+                    guard pr.authorLogin?.caseInsensitiveCompare(login) == .orderedSame else { continue }
+                }
+                if seen.insert(pr.id).inserted { values.append(pr) }
+            }
+            guard search.pageInfo.hasNextPage else { break }
+            if values.count >= maximumResults { reasons.insert(.resultLimit); break }
+            if scanned >= 1000 { reasons.insert(.searchLimit); break }
+            if page == 20 { reasons.insert(.pageLimit); break }
+            guard let next = search.pageInfo.endCursor, !next.isEmpty, cursors.insert(next).inserted else {
+                reasons.insert(.invalidCursor)
+                break
+            }
+            cursor = next
         }
-        if response.search.pageInfo.hasNextPage { reasons.insert(.resultLimit) }
-        if response.search.issueCount > 1000 { reasons.insert(.searchLimit) }
+        try Task.checkCancellation()
+        // Preserve encounter order for ties, including when search changes between pages.
+        values = values.enumerated().sorted {
+            if $0.element.updatedAt == $1.element.updatedAt { return $0.offset < $1.offset }
+            return $0.element.updatedAt > $1.element.updatedAt
+        }.map(\.element)
         var coverage: Set<GitHubPullRequestDiscoveryResult.CoverageLimitation> = [.tokenVisibility]
         if reviewRequests { coverage.insert(.directReviewRequestsOnly) }
         return GitHubPullRequestDiscoveryResult(pullRequests: values, truncationReasons: reasons,
