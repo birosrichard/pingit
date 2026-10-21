@@ -3,12 +3,14 @@
 A lightweight, native macOS menu bar app for GitHub activity. The goal is to show
 pull requests, reviews, comments, and CI updates that need your attention.
 
-**Current status: Phase 3B — Pull Request Discovery.** Connect one GitHub.com account
+**Current status: Phase 3C — Pull Request Review Status.** Connect one GitHub.com account
 with a personal access token, verify its identity, see its username/avatar, and
 disconnect. The app restores and revalidates saved credentials at startup. Settings
 and the menu bar share connection state. The data layer can fetch authored open PRs
 and active direct review requests with bounded pagination. No UI calls discovery yet;
-Refresh remains disabled. Review/CI aggregation, polling, and notifications are deferred.
+Refresh remains disabled. Discovered PRs expose GitHub's overall review decision
+and bounded latest reviewer states with explicit coverage limitations. CI aggregation,
+polling, and notifications are deferred. See [review semantics](docs/reviews.md).
 See [discovery permissions, bounds, and team limitations](docs/discovery.md).
 
 ## Requirements

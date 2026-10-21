@@ -1,6 +1,6 @@
 # Development roadmap
 
-Phases 1, 2, 3A and 3B are implemented. Phase 3C and Phases 4–8 remain planned.
+Phases 1, 2, 3A, 3B and 3C are implemented. Phase 3D and Phases 4–8 remain planned.
 Keep each phase independently buildable and validate before moving on.
 
 ## 1. Project foundation
@@ -43,7 +43,16 @@ Keep each phase independently buildable and validate before moving on.
 - Mocked tests cover discovery, failures and cancellation; no UI or lifecycle calls yet.
 - See [discovery permissions and limitations](discovery.md). Live token coverage remains unverified.
 
-### 3C. Discovery state and explicit refresh — recommended next scope
+### 3C. Pull request review status — implemented
+
+- GitHub's authoritative overall decision, including explicit unknown values.
+- Bounded latest non-pending reviews per user, preserving dismissed/commented states.
+- Per-PR limitations for truncated, unavailable, missing or unsupported details.
+- Review fields batched into both discovery queries; no full histories or N+1 requests.
+- Mocked tests and arm64 Debug build pass; signed Keychain/live API remain unverified.
+- See [review semantics and limitations](reviews.md). No CI, UI, polling or notifications.
+
+### 3D. Discovery state and explicit refresh — recommended next scope
 
 - A cancellable state layer using the existing account/Keychain credential.
 - Preserve authored/review results, loading/error state, and coverage/truncation metadata.

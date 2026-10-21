@@ -71,7 +71,9 @@ not loaded; an empty request list means a known empty result. Deleted authors ha
 an optional login. Codable uses domain names, not GraphQL connection shapes;
 query DTOs map into these values. Domain Codable decoding uses caller date strategies;
 the discovery mapper handles GitHub ISO-8601 timestamps directly.
-No review/CI aggregation is implemented.
+Discovery maps GitHub's authoritative overall review decision and bounded latest
+non-pending reviewer states, with per-PR detail limitations. It never calculates
+review rules or merge readiness; CI remains unloaded. See [review semantics](reviews.md).
 
 `GitHubPullRequestDiscovery` is a stateless Sendable value around the existing client.
 It accepts the validated account and Keychain token per call, verifies `viewer.login`,
@@ -113,7 +115,7 @@ check catches macOS launch-time rejection; static signature checks alone are ins
 
 ## Future boundaries
 
-Phases 1, 2, 3A and 3B are implemented. A future discovery state layer will connect
+Phases 1, 2, 3A, 3B and 3C are implemented. A future discovery state layer will connect
 explicit refresh to authenticated data access. PR/review data belongs outside views, using
 asynchronous calls with cancellation, pagination, and rate-limit handling. Future
 repository permissions must be documented separately; successful account validation

@@ -1,4 +1,4 @@
-# Pull request discovery (Phase 3B)
+# Pull request discovery (Phases 3B–3C)
 
 `GitHubPullRequestDiscovery` fetches data on explicit invocation. No app scene calls
 it yet, and Refresh remains disabled. Supply the `GitHubAccount` already validated
@@ -37,7 +37,9 @@ creation/update dates, author and draft state. Deleted authors/reviewers are nul
 Timestamps accept ISO-8601 with optional fractional seconds. Missing required fields,
 invalid dates/URLs or node shapes fail explicitly; a null search node is `missingData`.
 A missing review-request connection is `partialData`, not a fulfilled request.
-Review decisions and CI status remain nil; none are inferred.
+Both discovery queries also retrieve overall review decisions and bounded latest
+reviewer details. Missing decisions become unknown; CI stays nil. No state is
+inferred from approval counts. See [review semantics and limitations](reviews.md).
 
 ## Bounds and completeness
 
@@ -98,8 +100,9 @@ These rules come from GitHub's
 The [requested-reviewer API](https://docs.github.com/en/rest/pulls/review-requests#get-all-requested-reviewers-for-a-pull-request)
 and [PR API](https://docs.github.com/en/rest/pulls/pulls#get-a-pull-request) document
 Pull requests read permission for those resources. The GraphQL client uses the same
-PAT and only requests PR/repository metadata and active review requests. No Contents,
-Issues, Checks, Actions, Members or write permission is requested by this feature.
+PAT and only requests PR/repository metadata, latest review states and active review
+requests. No Contents, Issues, Checks, Actions, Members or write permission is requested
+by this feature.
 Live GraphQL access for a particular organization still needs a signed-app/token
 acceptance pass; REST permission references are not a live permission probe.
 
@@ -122,7 +125,8 @@ validation, null authors, fractional dates, draft
 rules, direct/fulfilled/team requests, empty visibility-limited results, cursor and
 nested limits, deduplication/order, permission/API errors and cancellation on page two.
 
-Phase 3C should add a cancellable, user-initiated discovery state layer that loads the
-existing credential and exposes authored/review lists, errors, truncation and coverage.
-UI wiring requires a separately approved scope. Team discovery needs its own tests and
-access/visibility policy. Review/CI aggregation, polling and notifications stay deferred.
+Phase 3D is recommended to add a cancellable, user-initiated discovery state layer
+that loads the existing credential and exposes authored/review lists, errors,
+truncation and coverage. Phase 3D and UI wiring require separate instructions. Team
+discovery needs its own tests and access/visibility policy. CI aggregation, activity
+tracking, polling and notifications stay deferred.
