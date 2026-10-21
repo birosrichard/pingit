@@ -110,3 +110,69 @@ final class GitHubConnection {
         }
     }
 }
+
+// Only non-secret metadata is Codable. IDs never derive from credentials.
+struct GitHubTokenConnection: Codable, Equatable, Identifiable, Sendable {
+    let id: UUID
+    var account: GitHubAccount?
+    var resourceOwner: String
+    var validatedAt: Date?
+    var status: String = "Not validated"
+    var storageAccount: String { "connection-" + id.uuidString.lowercased() }
+}
+
+@MainActor
+final class GitHubConnectionMetadata {
+    struct Snapshot: Codable {
+        var connections: [GitHubTokenConnection] = []
+        var migrationID: UUID?
+        var migrationComplete = false
+    }
+    private let defaults: UserDefaults?
+    private var memory = Snapshot()
+    private let key = "github.connections.v1"
+
+    init(defaults: UserDefaults? = nil) { self.defaults = defaults }
+
+    func migrate(credentials: KeychainCredentialStore) throws -> Snapshot {
+        var snapshot = try load()
+        guard !snapshot.migrationComplete else { return snapshot }
+        guard let legacy = try credentials.load() else {
+            snapshot.migrationComplete = true
+            try save(snapshot)
+            return snapshot
+        }
+        let id = snapshot.migrationID ?? UUID()
+        snapshot.migrationID = id
+        try save(snapshot)
+        let row = GitHubTokenConnection(id: id, account: nil, resourceOwner: "Legacy token")
+        let existing = try credentials.load(account: row.storageAccount)
+        if existing == nil { try credentials.save(legacy, account: row.storageAccount) }
+        guard try credentials.load(account: row.storageAccount) == legacy else {
+            throw KeychainCredentialStore.StorageError.invalidData
+        }
+        if !snapshot.connections.contains(where: { $0.id == id }) {
+            snapshot.connections.append(row)
+        }
+        try save(snapshot)
+        try credentials.remove()
+        snapshot.migrationComplete = true
+        try save(snapshot)
+        return snapshot
+    }
+
+    func load() throws -> Snapshot {
+        guard let defaults, let data = defaults.data(forKey: key) else { return memory }
+        return try JSONDecoder().decode(Snapshot.self, from: data)
+    }
+
+    func save(_ snapshot: Snapshot) throws {
+        let data = try JSONEncoder().encode(snapshot)
+        if let defaults {
+            defaults.set(data, forKey: key)
+            // Verify the metadata before a migration is allowed to delete credentials.
+            guard defaults.data(forKey: key) == data else { throw KeychainCredentialStore.StorageError.unavailable }
+        }
+        memory = snapshot
+    }
+}

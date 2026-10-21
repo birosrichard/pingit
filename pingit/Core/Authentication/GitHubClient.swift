@@ -1,11 +1,12 @@
 import Foundation
 
-struct GitHubAccount: Decodable, Equatable, Sendable {
+struct GitHubAccount: Codable, Equatable, Sendable {
+    var id: Int? = nil
     let login: String
     let avatarURL: URL
 
     enum CodingKeys: String, CodingKey {
-        case login
+        case id, login
         case avatarURL = "avatar_url"
     }
 }

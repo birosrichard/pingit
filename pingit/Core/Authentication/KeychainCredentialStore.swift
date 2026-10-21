@@ -32,18 +32,18 @@ struct KeychainCredentialStore {
         self.operations = operations
     }
 
-    private var query: [String: Any] {
+    private func query(account: String) -> [String: Any] {
         [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
-            kSecAttrAccount as String: "personal-access-token",
+            kSecAttrAccount as String: account,
             kSecUseDataProtectionKeychain as String: true,
             kSecAttrSynchronizable as String: false
         ]
     }
 
-    func load() throws -> String? {
-        var query = query
+    func load(account: String = "personal-access-token") throws -> String? {
+        var query = query(account: account)
         query[kSecReturnData as String] = true
         query[kSecMatchLimit as String] = kSecMatchLimitOne
         let (status, result) = operations.read(query as CFDictionary)
@@ -58,24 +58,24 @@ struct KeychainCredentialStore {
         return token
     }
 
-    func save(_ token: String) throws {
+    func save(_ token: String, account: String = "personal-access-token") throws {
         let attributes: [String: Any] = [
             kSecValueData as String: Data(token.utf8),
             kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlockedThisDeviceOnly
         ]
-        var item = query
+        var item = query(account: account)
         item.merge(attributes) { _, new in new }
         var status = operations.add(item as CFDictionary)
         if status == errSecDuplicateItem {
-            status = operations.update(query as CFDictionary, attributes as CFDictionary)
+            status = operations.update(query(account: account) as CFDictionary, attributes as CFDictionary)
         }
         guard status == errSecSuccess else {
             throw status == errSecMissingEntitlement ? StorageError.signingRequired : StorageError.unavailable
         }
     }
 
-    func remove() throws {
-        let status = operations.delete(query as CFDictionary)
+    func remove(account: String = "personal-access-token") throws {
+        let status = operations.delete(query(account: account) as CFDictionary)
         guard status == errSecSuccess || status == errSecItemNotFound else {
             throw status == errSecMissingEntitlement ? StorageError.signingRequired : StorageError.unavailable
         }
