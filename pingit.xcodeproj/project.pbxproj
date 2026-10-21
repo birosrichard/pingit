@@ -5,6 +5,7 @@
     objectVersion = 56;
     objects = {
 /* Begin PBXBuildFile section */
+        B10000000000000000000002 = {isa = PBXBuildFile; fileRef = B20000000000000000000002; };
         B10000000000000000000001 = {isa = PBXBuildFile; fileRef = B20000000000000000000001; };
         A10000000000000000000003 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000007 /* SettingsView.swift */; };
         A10000000000000000000002 /* MenuBarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000006 /* MenuBarView.swift */; };
@@ -12,6 +13,7 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+        B20000000000000000000002 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GitHubClient.swift; sourceTree = "<group>"; };
         B20000000000000000000001 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainCredentialStore.swift; sourceTree = "<group>"; };
         A20000000000000000000007 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
         A20000000000000000000006 /* MenuBarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarView.swift; sourceTree = "<group>"; };
@@ -28,7 +30,7 @@
 
 /* Begin PBXGroup section */
         B40000000000000000000001 /* Core */ = {isa = PBXGroup; children = (B40000000000000000000002); path = Core; sourceTree = "<group>"; };
-        B40000000000000000000002 /* Authentication */ = {isa = PBXGroup; children = (B20000000000000000000001); path = Authentication; sourceTree = "<group>"; };
+        B40000000000000000000002 /* Authentication */ = {isa = PBXGroup; children = (B20000000000000000000001, B20000000000000000000002); path = Authentication; sourceTree = "<group>"; };
         A40000000000000000000009 /* Settings */ = {isa = PBXGroup; children = (A20000000000000000000007 /* SettingsView.swift */); path = Settings; sourceTree = "<group>"; };
         A40000000000000000000007 /* Features */ = {isa = PBXGroup; children = (A40000000000000000000008 /* MenuBar */, A40000000000000000000009 /* Settings */); path = Features; sourceTree = "<group>"; };
         A40000000000000000000008 /* MenuBar */ = {isa = PBXGroup; children = (A20000000000000000000006 /* MenuBarView.swift */); path = MenuBar; sourceTree = "<group>"; };
@@ -90,7 +92,7 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
-        A70000000000000000000001 = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (B10000000000000000000001, A10000000000000000000001 /* PingitApp.swift in Sources */, A10000000000000000000002 /* MenuBarView.swift in Sources */, A10000000000000000000003 /* SettingsView.swift in Sources */); runOnlyForDeploymentPostprocessing = 0; };
+        A70000000000000000000001 = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (B10000000000000000000002, B10000000000000000000001, A10000000000000000000001 /* PingitApp.swift in Sources */, A10000000000000000000002 /* MenuBarView.swift in Sources */, A10000000000000000000003 /* SettingsView.swift in Sources */); runOnlyForDeploymentPostprocessing = 0; };
 /* End PBXSourcesBuildPhase section */
 
 /* Begin XCBuildConfiguration section */
