@@ -7,6 +7,15 @@ struct MenuBarView: View {
     @State private var isShowingConnection = false
     @State private var selection = PullRequestInbox.review
     @State private var isShowingDetails = false
+    @FocusState private var focusedTab: PullRequestInbox?
+
+    init(selection: PullRequestInbox = .review) {
+        _selection = State(initialValue: selection)
+    }
+
+    private var screenFrame: CGRect {
+        NSScreen.main?.visibleFrame ?? CGRect(x: 0, y: 0, width: 492, height: 900)
+    }
 
     private var dashboard: PullRequestDashboard { connection.dashboard }
     private var state: PullRequestSectionState {
@@ -51,7 +60,8 @@ struct MenuBarView: View {
             Divider()
             footer
         }
-        .frame(width: 440)
+        .frame(minWidth: 0, idealWidth: DashboardLayout.width(availableScreenWidth: screenFrame.width),
+               maxWidth: DashboardLayout.width(availableScreenWidth: screenFrame.width))
         .background(Color(nsColor: .windowBackgroundColor))
         .onAppear { dashboard.loadIfNeeded() }
         .onChange(of: connection.account) { _, account in
@@ -71,10 +81,10 @@ struct MenuBarView: View {
                 .frame(width: 34)
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 4) {
-                Text("pingit").font(.system(size: 20, weight: .bold))
+                Text("pingit").font(.title.weight(.bold))
                 if let account = connection.account {
                     Text("@\(account.login) · \(connection.connections.count) \(connection.connections.count == 1 ? "token" : "tokens")")
-                        .font(.system(size: 12))
+                        .font(.callout)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                         .truncationMode(.middle)
@@ -98,28 +108,29 @@ struct MenuBarView: View {
                 .keyboardShortcut("r")
                 .help("Refresh pull requests (⌘R)")
         }
-        .padding(.horizontal, 20)
+        .padding(.horizontal, DashboardLayout.horizontalInset)
         .padding(.vertical, 16)
     }
 
     private var inbox: some View {
         VStack(spacing: 0) {
             navigation
-                .padding(.horizontal, 16)
-                .padding(.vertical, 14)
+                .padding(.horizontal, DashboardLayout.horizontalInset)
+                .padding(.top, 12)
+                .padding(.bottom, 8)
                 .background(Color(nsColor: .windowBackgroundColor))
 
             HStack {
-                Text(selection.title).font(.system(size: 17, weight: .bold))
+                Text(selection.contextTitle).font(.headline)
                     .accessibilityAddTraits(.isHeader)
                 Spacer()
                 if selection == .review {
-                    Text("Direct requests").font(.caption).foregroundStyle(.secondary)
+                    Text("Direct only").font(.caption).foregroundStyle(.secondary)
                         .help("Team review requests aren’t included.")
                 }
             }
-            .padding(.horizontal, 20)
-            .padding(.top, 16)
+            .padding(.horizontal, DashboardLayout.horizontalInset)
+            .padding(.top, 12)
             .padding(.bottom, 10)
 
             if pullRequests.isEmpty {
@@ -130,19 +141,28 @@ struct MenuBarView: View {
                 ScrollView {
                     LazyVStack(spacing: 0) {
                         ForEach(pullRequests) { pr in
-                            PullRequestRow(pr: pr, showsAuthor: selection == .review)
+                            PullRequestRow(presentation: .init(pr: pr, inbox: selection))
                             if pr.id != pullRequests.last?.id {
-                                Divider().padding(.leading, 58).padding(.trailing, 12)
+                                Divider()
+                                    .padding(.leading, DashboardLayout.rowInset + DashboardLayout.avatarSize + DashboardLayout.avatarSpacing)
+                                    .padding(.trailing, DashboardLayout.rowInset)
                             }
                         }
                     }
-                    .padding(.horizontal, 8)
-                    .padding(.bottom, 6)
+                    .padding(4)
+                    .padding(.trailing, 8) // Leave room for macOS overlay scroll indicators.
                 }
-                .frame(height: min(360, CGFloat(pullRequests.count) * 126 + 6))
+                .id(selection)
+                .frame(height: DashboardLayout.listHeight(rowCount: pullRequests.count, availableScreenHeight: screenFrame.height))
+                .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 12))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 12).strokeBorder(.quaternary.opacity(0.6))
+                }
+                .clipShape(RoundedRectangle(cornerRadius: 12))
+                .padding(.horizontal, DashboardLayout.listInset)
+                .padding(.bottom, 16)
             }
         }
-        .background(Color(nsColor: .controlBackgroundColor))
     }
 
     private var navigation: some View {
@@ -152,51 +172,58 @@ struct MenuBarView: View {
                 let isSelected = tab == selection
                 Button { selection = tab } label: {
                     HStack(spacing: 6) {
-                        Text(tab == .review ? "Review" : tab == .authored ? "My PRs" : "Drafts")
-                            .font(.system(size: 13, weight: isSelected ? .semibold : .medium))
+                        Text(tab.shortTitle)
+                            .font(.body.weight(isSelected ? .semibold : .medium))
                         Text(tabState.result == nil ? "—" : String(tab.pullRequests(in: tabState).count))
-                            .font(.system(size: 11, weight: .semibold))
+                            .font(.caption.weight(.medium))
                             .monospacedDigit()
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
-                            .foregroundStyle(isSelected ? Color(nsColor: .controlBackgroundColor) : .secondary)
-                            .background(isSelected ? Color.primary : Color.primary.opacity(0.07), in: Capsule())
+                            .foregroundStyle(.secondary)
                     }
-                    .frame(maxWidth: .infinity, minHeight: 32)
+                    .frame(maxWidth: .infinity, minHeight: 30)
                     .contentShape(RoundedRectangle(cornerRadius: 8))
                     .background(isSelected ? Color(nsColor: .controlBackgroundColor) : .clear,
-                                in: RoundedRectangle(cornerRadius: 8))
+                                in: RoundedRectangle(cornerRadius: 6))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 6)
+                            .strokeBorder(focusedTab == tab ? Color.accentColor : .clear, lineWidth: 2)
+                    }
                 }
                 .buttonStyle(.plain)
+                .focused($focusedTab, equals: tab)
                 .keyboardShortcut(KeyEquivalent(Character(String(index + 1))), modifiers: .command)
                 .accessibilityLabel(tab.label(in: tabState))
                 .accessibilityAddTraits(isSelected ? .isSelected : [])
                 .help("\(tab.title) (⌘\(index + 1))")
             }
         }
-        .padding(4)
-        .background(Color.primary.opacity(0.055), in: RoundedRectangle(cornerRadius: 11))
+        .padding(3)
+        .background(Color.primary.opacity(0.055), in: RoundedRectangle(cornerRadius: 9))
+        .onKeyPress(.leftArrow) { moveTab(by: -1); return .handled }
+        .onKeyPress(.rightArrow) { moveTab(by: 1); return .handled }
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Inbox navigation")
     }
 
+    private func moveTab(by offset: Int) {
+        let tabs = PullRequestInbox.allCases
+        guard let index = tabs.firstIndex(of: focusedTab ?? selection) else { return }
+        let next = tabs[min(tabs.count - 1, max(0, index + offset))]
+        selection = next
+        focusedTab = next
+    }
+
     private var emptyState: some View {
-        VStack(spacing: 7) {
-            if state.phase == .idle || state.phase == .loading {
-                Text("Loading pull requests…").font(.headline)
-            } else if state.phase == .failed {
-                Image(systemName: "exclamationmark.triangle").foregroundStyle(.orange)
-                Text("Couldn’t update this inbox").font(.headline)
-                Text("Refresh to retry, or open the warning below for details.")
-                    .font(.callout).foregroundStyle(.secondary)
+        let display = PullRequestEmptyPresentation(inbox: selection, phase: state.phase)
+        return VStack(spacing: 8) {
+            if display.isLoading {
+                ProgressView().controlSize(.small)
             } else {
-                Image(systemName: selection == .review ? "checkmark.circle" : "tray")
-                    .font(.title2).foregroundStyle(.secondary)
-                Text(selection == .review ? "All caught up" : selection == .drafts ? "No drafts" : "No open pull requests")
-                    .font(.headline)
-                Text(selection == .review ? "No direct requests in the repositories visible to your tokens." : "Nothing here in the repositories visible to your tokens.")
-                    .font(.callout).foregroundStyle(.secondary)
+                Image(systemName: display.systemImage)
+                    .font(.title2)
+                    .foregroundStyle(display.isFailure ? Color.orange : .secondary)
             }
+            Text(display.title).font(.headline)
+            Text(display.message).font(.callout).foregroundStyle(.secondary)
         }
         .multilineTextAlignment(.center)
         .padding(.horizontal, 28)
@@ -243,7 +270,7 @@ struct MenuBarView: View {
                             .help("Last successful update: \(date.formatted(date: .complete, time: .standard))")
                     }
                 }
-                .font(.caption)
+                .font(.callout)
             }
             HStack {
                 Button("Settings…", systemImage: "gearshape") {
@@ -258,7 +285,7 @@ struct MenuBarView: View {
             .font(.callout)
         }
         .buttonStyle(.borderless)
-        .padding(.horizontal, 20)
+        .padding(.horizontal, DashboardLayout.horizontalInset)
         .padding(.vertical, 12)
         .foregroundStyle(.secondary)
     }
@@ -284,110 +311,4 @@ struct MenuBarView: View {
         }
         .frame(width: 340, height: 280)
     }
-}
-
-private struct PullRequestRow: View {
-    let pr: GitHubPullRequest
-    let showsAuthor: Bool
-    @State private var isHovered = false
-
-    var body: some View {
-        Group {
-            if let url = pr.browserURL {
-                Link(destination: url) { content }
-                    .buttonStyle(.plain)
-                    .help("\(pr.title)\n\(pr.repository.nameWithOwner) #\(pr.number)\n\(pr.reviewPresentation.detail)\n\(pr.diffStatistics?.accessibilityLabel ?? "Diff statistics unavailable")")
-            } else {
-                content.help("This pull request has an invalid GitHub URL.")
-            }
-        }
-        .accessibilityElement(children: .combine)
-        .onHover { isHovered = $0 }
-    }
-
-    private var content: some View {
-        HStack(alignment: .top, spacing: 12) {
-            GitHubOwnerAvatar(owner: showsAuthor ? pr.authorLogin : pr.repository.ownerLogin, size: 32)
-            VStack(alignment: .leading, spacing: 6) {
-                HStack(alignment: .firstTextBaseline, spacing: 8) {
-                    Text(pr.title)
-                        .font(.system(size: 14, weight: .semibold))
-                        .lineLimit(2)
-                        .multilineTextAlignment(.leading)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    TimelineView(.periodic(from: .now, by: 60)) { context in
-                        Text(pr.compactUpdatedAge(relativeTo: context.date))
-                    }
-                    .font(.system(size: 11)).monospacedDigit().foregroundStyle(.secondary)
-                    .fixedSize()
-                    .help("Updated \(pr.updatedAt.formatted(date: .complete, time: .standard))")
-                    .accessibilityLabel("Updated \(pr.updatedAt.formatted(date: .abbreviated, time: .shortened))")
-                }
-                Text("\(pr.repository.nameWithOwner) #\(String(pr.number))")
-                    .font(.system(size: 12)).foregroundStyle(.secondary)
-                    .lineLimit(1).truncationMode(.middle)
-                    .help("\(pr.repository.nameWithOwner) #\(pr.number)")
-                ViewThatFits(in: .horizontal) {
-                    HStack(spacing: 10) { metadata }
-                    VStack(alignment: .leading, spacing: 4) { metadata }
-                }
-                .font(.system(size: 12))
-                diffMetadata
-                    .font(.system(size: 11))
-                if pr.browserURL == nil {
-                    Label("GitHub link unavailable", systemImage: "link")
-                        .font(.caption).foregroundStyle(.secondary)
-                }
-            }
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 14)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .contentShape(Rectangle())
-        .background(isHovered && pr.browserURL != nil ? Color.primary.opacity(0.06) : .clear,
-                    in: RoundedRectangle(cornerRadius: 6))
-    }
-
-    private func metadataColor(_ tone: PullRequestReviewPresentation.Tone) -> Color {
-        switch tone {
-        case .neutral: .secondary
-        case .positive: .green
-        case .caution: .orange
-        case .negative: .red
-        }
-    }
-
-    @ViewBuilder private var metadata: some View {
-        if pr.isDraft {
-            Label("Draft", systemImage: "pencil.circle").foregroundStyle(.secondary)
-        }
-        if showsAuthor {
-            Text(pr.authorLogin.map { "@\($0)" } ?? "Author unavailable")
-                .foregroundStyle(.secondary).lineLimit(1)
-        } else {
-            let display = pr.reviewPresentation
-            Label(display.label, systemImage: display.systemImage)
-                .foregroundStyle(metadataColor(display.tone))
-                .help(display.detail)
-                .accessibilityLabel("\(display.label). \(display.detail)")
-        }
-    }
-
-    @ViewBuilder private var diffMetadata: some View {
-        if let diff = pr.diffStatistics {
-            HStack(spacing: 6) {
-                Text(diff.filesLabel).foregroundStyle(.secondary)
-                Text(diff.additionsLabel).foregroundStyle(.green)
-                Text(diff.deletionsLabel).foregroundStyle(.red)
-            }
-            .monospacedDigit()
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel(diff.accessibilityLabel)
-            .help(diff.accessibilityLabel)
-        } else {
-            Text("Diff unavailable").foregroundStyle(.secondary)
-                .accessibilityLabel("Diff statistics unavailable")
-        }
-    }
-
 }

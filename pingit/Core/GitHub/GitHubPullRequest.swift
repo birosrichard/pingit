@@ -121,6 +121,10 @@ struct GitHubPullRequestReview: Codable, Equatable, Sendable, Identifiable {
 
 extension GitHubPullRequest {
     func compactUpdatedAge(relativeTo now: Date) -> String {
+        Self.compactAge(updatedAt: updatedAt, relativeTo: now)
+    }
+
+    static func compactAge(updatedAt: Date, relativeTo now: Date) -> String {
         let seconds = max(0, now.timeIntervalSince(updatedAt))
         if seconds < 60 { return "now" }
         if seconds < 3_600 { return "\(Int(seconds / 60))m" }

@@ -33,6 +33,7 @@ struct GitHubAccountView: View {
 struct GitHubOwnerAvatar: View {
     let owner: String?
     var size: CGFloat = 32
+    var fallbackSystemImage = "person.crop.circle.fill"
 
     var body: some View {
         // This public request is independent of the authenticated GitHub client.
@@ -40,7 +41,7 @@ struct GitHubOwnerAvatar: View {
             if case .success(let image) = phase {
                 image.resizable().scaledToFill()
             } else {
-                Image(systemName: "person.crop.circle.fill")
+                Image(systemName: fallbackSystemImage)
                     .resizable()
                     .scaledToFit()
                     .foregroundStyle(.secondary)
