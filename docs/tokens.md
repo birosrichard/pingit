@@ -1,3 +1,7 @@
+> Phase 4A adds independent current-head CI and PR diff totals to the existing
+> discovery/refresh lifecycle. See [CI semantics and token limitations](checks.md)
+> and [Phase 4A validation](phase-4a.md). Historical validation below remains unchanged.
+
 # Multiple fine-grained GitHub tokens (Phase 3E)
 
 pingit supports one GitHub.com identity with independent token scopes, for example

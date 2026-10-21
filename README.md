@@ -3,20 +3,22 @@
 A lightweight, native macOS menu bar app for GitHub activity. The goal is to show
 pull requests, reviews, comments, and CI updates that need your attention.
 
-**Current status: Phase 3E — Multiple Fine-Grained GitHub Tokens.** Connect one GitHub.com
-account with multiple personal access tokens stored independently in macOS Keychain. Open the menu bar
-to see active direct review requests and authored open PRs, review decisions,
-separate Review / My PRs / Drafts inboxes, counts, relative timestamps, and repository visibility limits. Open PRs on GitHub,
-or refresh with the button/⌘R. Results stay in memory, refresh after a 60-second
-freshness window on opening. Removing a token discards its exclusive results. CI, polling, and notifications
-remain deferred. See [dashboard behavior and validation](docs/dashboard.md),
-[review semantics](docs/reviews.md), and
-[discovery permissions and limitations](docs/discovery.md).
+**Current status: Phase 4A — CI checks and pull request diff statistics.**
+Connect one GitHub.com account with multiple personal access tokens stored independently
+in macOS Keychain. Review / My PRs / Drafts show review information, file/addition/deletion
+totals and CI for the current PR head. **Checks passed does not mean Ready to merge**:
+reviews, conflicts and branch protection remain separate. CI availability depends on
+token access and GitHub's fine-grained PAT limitations; unavailable data never becomes
+success. Open PRs on GitHub or refresh with the button/⌘R. Results stay in memory with
+a 60-second freshness window on opening. Removing a token discards its exclusive results.
+Polling and notifications remain deferred. See [CI semantics and permissions](docs/checks.md),
+[Phase 4A validation](docs/phase-4a.md), [review semantics](docs/reviews.md), and
+[discovery limitations](docs/discovery.md).
 
 ## Requirements
 
 - macOS 14 or later; Apple Silicon and Intel
-- Xcode 16 or later with Swift 6; Phase 3E validated with Xcode 27.1 / Swift 6.4
+- Xcode 16 or later with Swift 6; Phase 4A validated with Xcode 27.1 / Swift 6.4
 - A valid Apple Development signing identity and provisioning profile for real
   Keychain access (choose your development team in Xcode; no team is committed)
 
@@ -67,7 +69,7 @@ hardened runtime for ad hoc signing. Distribution/notarization is future work.
 2. Create a [fine-grained token](https://github.com/settings/personal-access-tokens/new)
    with an expiration. Select the intended resource owner and repositories.
    For private PRs grant **Pull requests: Read-only** and accompanying
-   **Metadata: Read-only**. No write permissions are needed.
+   **Metadata: Read-only**. For CI, see [minimum read permissions and GitHub PAT limitations](docs/checks.md#token-permissions-and-current-github-limitations). No write permissions are needed.
 3. Enter a resource-owner label (for example `birosrichard`), paste into the secure
    token field, and choose **Validate and add**. Validation calls `GET /user` before
    saving. The configured owner remains explicitly unverified.

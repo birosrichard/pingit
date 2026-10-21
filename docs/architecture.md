@@ -75,7 +75,8 @@ query DTOs map into these values. Domain Codable decoding uses caller date strat
 the discovery mapper handles GitHub ISO-8601 timestamps directly.
 Discovery maps GitHub's authoritative overall review decision and bounded latest
 non-pending reviewer states, with per-PR detail limitations. It never calculates
-review rules or merge readiness; CI remains unloaded. See [review semantics](reviews.md).
+review rules or merge readiness. CI and diff totals are independent head-bound metadata;
+see [CI semantics](checks.md) and [review semantics](reviews.md).
 
 `GitHubPullRequestDiscovery` is a stateless Sendable value around the existing client.
 It accepts the validated account and Keychain token per call, verifies `viewer.login`,
@@ -157,3 +158,15 @@ assets, and packaging remain Phase 8 work.
 - [Authenticated GitHub user](https://docs.github.com/en/rest/users/users#get-the-authenticated-user)
 - [GitHub GraphQL requests and variables](https://docs.github.com/en/graphql/guides/forming-calls-with-graphql)
 - [GraphQL rate-limit failures](https://docs.github.com/en/graphql/overview/rate-limits-and-query-limits-for-the-graphql-api)
+
+## Phase 4A metadata
+
+The existing discovery queries retrieve PR diff totals and one PR head commit's
+check/status rollup with connection-wide state counters. DTO normalization verifies
+head identity and counter consistency. `GitHubCheckSnapshot` is independent of the
+review decision and never represents merge readiness. Optional CI GraphQL failures
+can recover only by discarding the affected CI subtree; rate limits and unrelated
+partial errors retain strict source failure behavior. Metadata reconciliation uses
+all newest observations to keep multi-token conflicts independent of order. No
+new request lifecycle, persisted private metadata, polling or dependency is added.
+See [detailed CI and diff policy](checks.md) and [validation](phase-4a.md).

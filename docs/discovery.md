@@ -1,3 +1,7 @@
+> Phase 4A adds independent current-head CI and PR diff totals to the existing
+> discovery/refresh lifecycle. See [CI semantics and token limitations](checks.md)
+> and [Phase 4A validation](phase-4a.md). Historical validation below remains unchanged.
+
 > Phase 3E: each method below is invoked separately for every configured token.
 > Pagination bounds and errors remain per token. The dashboard schedules up to two
 > token scopes concurrently and merges their node IDs within each semantic section.

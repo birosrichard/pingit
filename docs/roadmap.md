@@ -1,6 +1,7 @@
 # Development roadmap
 
-Phases 1, 2, 3A, 3B, 3C, 3D and 3E are implemented. Phases 4–8 remain planned.
+Phases 1–3F and Phase 4A (CI checks and diff statistics) are implemented.
+Further activity, background updates and distribution work remain separately scoped.
 Keep each phase independently buildable and validate before moving on.
 
 ## 1. Project foundation
@@ -72,6 +73,24 @@ Keep each phase independently buildable and validate before moving on.
 - Automated tests, signed arm64 Debug validation and manual two-token checklist are
   recorded in [token setup and limitations](tokens.md). Live scope coverage remains manual.
 - No multi-account support, OAuth, CI, polling, notifications or GitHub writes.
+
+### 3F. Review status and coverage UX — implemented
+
+- Independent overall review decisions and latest reviewer activity; meaningful null-decision fallbacks.
+- Structural limits stay informational, while observed failures/conflicts remain visible.
+- See [Phase 3F validation](phase-3f.md).
+
+## 4A. CI checks and PR diff statistics — implemented
+
+- Current-head GitHub Checks and legacy statuses, bounded connection-wide counters.
+- Conservative passing/failing/running/cancelled/skipped/no-checks/unavailable semantics.
+- PR-level file/addition/deletion totals in every inbox, accessible compact rows.
+- Multi-token head/conflict safety, existing refresh lifecycle, no additional requests.
+- Checks, reviews and merge readiness remain independent. Fine-grained PAT Checks
+  availability is a documented GitHub limitation, not an assumed permission.
+- See [semantics and permissions](checks.md) and [validation](phase-4a.md).
+- Next: signed-app personal/Apify token acceptance and VoiceOver/keyboard checks;
+  scope any authentication change separately if PAT Checks access remains unavailable.
 
 ## 4. Reviews and relevant activity
 

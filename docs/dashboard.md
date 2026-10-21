@@ -1,3 +1,7 @@
+> Phase 4A adds independent current-head CI and PR diff totals to the existing
+> discovery/refresh lifecycle. See [CI semantics and token limitations](checks.md)
+> and [Phase 4A validation](phase-4a.md). Historical validation below remains unchanged.
+
 > Phase 3F updates: structural limits now appear under neutral **Discovery info**.
 > Observed truncation/conflicts show **Partial results**; errors show **GitHub needs
 > attention**. Authored/draft rows use meaningful individual-review fallbacks for
