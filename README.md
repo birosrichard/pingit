@@ -35,7 +35,8 @@ names and event history are never persisted. See [change detection and validatio
 - macOS 14 or later; Apple Silicon and Intel
 - Xcode 16 or later with Swift 6; Phase 5B validated with Xcode 27.1 / Swift 6.4
 - A valid Apple Development signing identity and provisioning profile for real
-  Keychain access (choose your development team in Xcode; no team is committed)
+  Keychain access (choose a team in Xcode for which you have signing assets;
+  the committed team ID alone does not provide them)
 
 ## Build and run
 
@@ -138,6 +139,11 @@ A locked/unavailable keychain or missing signing entitlement is surfaced without
 claiming that credentials were saved or removed.
 
 ## Validation
+
+Pull requests to `main` run the native app build and full automated suite on
+GitHub-hosted macOS with pinned Xcode 26.3 and ad hoc signing. See
+[macOS CI](docs/ci.md) for toolchain checks, logs, local reproduction, signing
+boundaries, and Linux validation limits.
 
 Run the mocked unit tests (no real token or user Keychain access):
 

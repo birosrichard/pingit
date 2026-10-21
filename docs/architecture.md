@@ -102,8 +102,9 @@ on removal is success. The provisioned app requests its own Keychain access grou
 through Keychain Sharing. Ad hoc UI builds use separate preview entitlements without
 that restricted group, so they can launch but report a signing error for Keychain.
 Real credential use requires a valid Apple Development signing identity and profile.
-The prior single-token Data Protection item is migrated conservatively; there is no plaintext fallback. No development team/credentials
-are committed.
+The prior single-token Data Protection item is migrated conservatively; there is no plaintext fallback.
+A development team ID is configured in the project; signing certificates, private
+keys, and provisioning profiles are not committed.
 
 App Sandbox permits outbound networking only. It grants no file access, network
 server access, or temporary exceptions. ATS remains enabled with no overrides.
