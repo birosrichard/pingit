@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct SettingsView: View {
+    @Environment(GitHubConnection.self) private var connection
     private var version: String {
         Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "Unknown"
     }
@@ -10,9 +11,25 @@ struct SettingsView: View {
     }
 
     var body: some View {
+        @Bindable var preferences = connection.dashboard.syncPreferences
         Form {
             Section("GitHub tokens") {
                 GitHubConnectionControls()
+            }
+
+            Section("Background Sync") {
+                Toggle("Enable background sync", isOn: $preferences.enabled)
+                Picker("Refresh interval", selection: $preferences.intervalMinutes) {
+                    ForEach(BackgroundSyncPreferences.intervals, id: \.self) { minutes in
+                        Text("\(minutes) minutes").tag(minutes)
+                    }
+                }
+                .disabled(!preferences.enabled)
+                if let date = connection.dashboard.lastSuccessfulRefreshAt {
+                    LabeledContent("Last data received", value: date.formatted(date: .abbreviated, time: .shortened))
+                }
+                Text("Refreshes while pingit is running, even with the menu closed. Failed connections keep their previous results.")
+                    .font(.caption).foregroundStyle(.secondary)
             }
 
             Section("About pingit") {
@@ -21,7 +38,7 @@ struct SettingsView: View {
             }
         }
         .formStyle(.grouped)
-        .frame(width: 520, height: 560)
+        .frame(width: 520, height: 700)
     }
 }
 

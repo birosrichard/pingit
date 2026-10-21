@@ -2,28 +2,46 @@ import SwiftUI
 
 @main
 struct PingitApp: App {
-    @State private var connection: GitHubConnection
-
-    init() {
-        let connection = GitHubConnection()
-        _connection = State(initialValue: connection)
-        Task { await connection.restore() }
-    }
+    @NSApplicationDelegateAdaptor(PingitAppDelegate.self) private var lifecycle
 
     var body: some Scene {
         MenuBarExtra {
             MenuBarView()
-                .environment(connection)
+                .environment(lifecycle.connection)
         } label: {
             Image("MenuBarIcon")
                 .renderingMode(.template)
-                .accessibilityLabel(connection.account == nil ? "pingit — Not connected" : "pingit — Connected")
+                .accessibilityLabel(lifecycle.connection.account == nil ? "pingit — Not connected" : "pingit — Connected")
         }
         .menuBarExtraStyle(.window)
 
         Settings {
             SettingsView()
-                .environment(connection)
+                .environment(lifecycle.connection)
         }
+    }
+}
+
+@MainActor
+final class PingitAppDelegate: NSObject, NSApplicationDelegate {
+    let connection = GitHubConnection()
+    private var restoration: Task<Void, Never>?
+
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        let workspace = NSWorkspace.shared.notificationCenter
+        workspace.addObserver(self, selector: #selector(willSleep), name: NSWorkspace.willSleepNotification, object: nil)
+        workspace.addObserver(self, selector: #selector(didWake), name: NSWorkspace.didWakeNotification, object: nil)
+        connection.dashboard.startBackgroundSync()
+        restoration = Task { [connection] in await connection.restore() }
+    }
+
+    @objc private func willSleep(_ notification: Notification) { connection.dashboard.systemWillSleep() }
+    @objc private func didWake(_ notification: Notification) { connection.dashboard.systemDidWake() }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        restoration?.cancel()
+        restoration = nil
+        connection.dashboard.shutdown()
+        NSWorkspace.shared.notificationCenter.removeObserver(self)
     }
 }

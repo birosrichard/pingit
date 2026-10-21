@@ -70,7 +70,7 @@ final class PullRequestDashboard {
     private(set) var reviews = PullRequestSectionState()
     private(set) var account: GitHubAccount?
     private(set) var sources: [UUID: SourceState] = [:]
-    var isLoading: Bool { authored.phase == .loading || reviews.phase == .loading }
+    var isLoading: Bool { isRefreshing || authored.phase == .loading || reviews.phase == .loading }
     private(set) var isRefreshing = false
     private(set) var lastAttemptAt: Date?
     private(set) var lastSuccessfulRefreshAt: Date?
@@ -162,6 +162,7 @@ final class PullRequestDashboard {
         })
         lastAttempt = nil
         rebuild()
+        lastSuccessfulRefreshAt = sources.values.flatMap { [$0.authored.updatedAt, $0.reviews.updatedAt] }.compactMap { $0 }.max()
         if rows.isEmpty {
             lastSuccessfulRefreshAt = nil
             lastAttemptAt = nil
@@ -204,13 +205,16 @@ final class PullRequestDashboard {
         watchdog?.cancel()
         watchdog = nil
         pendingRefresh = false
+        isRefreshing = false
         for id in sources.keys {
-            if sources[id]?.authored.phase == .loading {
-                sources[id]?.authored.phase = sources[id]?.authored.result == nil ? .idle : .loaded
+            guard var source = sources[id] else { continue }
+            if source.authored.phase == .loading {
+                source.authored.phase = source.authored.result == nil ? .idle : .loaded
             }
-            if sources[id]?.reviews.phase == .loading {
-                sources[id]?.reviews.phase = sources[id]?.reviews.result == nil ? .idle : .loaded
+            if source.reviews.phase == .loading {
+                source.reviews.phase = source.reviews.result == nil ? .idle : .loaded
             }
+            sources[id] = source
         }
     }
 
@@ -231,7 +235,11 @@ final class PullRequestDashboard {
     // Active requests coalesce into the current flight. Only identity changes queue one follow-up,
     // after cancelled workers drain; this also prevents old/new credentials from overlapping.
     func refresh(automatic: Bool = false) {
-        guard !connections.isEmpty, task == nil, !sleeping else { return }
+        guard !connections.isEmpty, !sleeping else { return }
+        if let task {
+            if task.isCancelled { pendingRefresh = true }
+            return
+        }
         let time = scheduler.clock.now()
         let eligible = connections.filter { row in
             let state = syncStates[row.id] ?? .init()
@@ -277,11 +285,11 @@ final class PullRequestDashboard {
             guard !Task.isCancelled, let self, self.session == session else { return }
             for row in eligible {
                 for review in [false, true] {
-                    var state = review ? self.sources[row.id]?.reviews : self.sources[row.id]?.authored
-                    guard state?.phase == .loading else { continue }
-                    state?.phase = .failed
-                    state?.errorMessage = "Refresh timed out. Try again later."
-                    if review { self.sources[row.id]?.reviews = state! } else { self.sources[row.id]?.authored = state! }
+                    guard var state = review ? self.sources[row.id]?.reviews : self.sources[row.id]?.authored,
+                          state.phase == .loading else { continue }
+                    state.phase = .failed
+                    state.errorMessage = "Refresh timed out. Try again later."
+                    if review { self.sources[row.id]?.reviews = state } else { self.sources[row.id]?.authored = state }
                 }
                 self.syncStates[row.id]?.failed(GitHubAPIError.networkUnavailable,
                                                 time: self.scheduler.clock.now(), date: self.now(), jitter: self.jitter())
@@ -325,10 +333,14 @@ final class PullRequestDashboard {
         _ = await (authored, reviews)
         guard self.session == session, !Task.isCancelled else { return }
         if let errors = flightErrors[row.id], !errors.isEmpty {
-            // Authentication wins; otherwise retain the latest server restriction.
-            let failure = errors.first { ($0 as? GitHubAPIError) == .invalidToken || ($0 as? GitHubAPIError) == .forbidden }
-                ?? errors.max { ($0 as? GitHubAPIError)?.retryDeadline ?? .distantPast < ($1 as? GitHubAPIError)?.retryDeadline ?? .distantPast }!
-            syncStates[row.id]?.failed(failure, time: scheduler.clock.now(), date: now(), jitter: jitter())
+            let apiErrors = errors.compactMap { $0 as? GitHubAPIError }
+            let authError = apiErrors.first { $0 == .invalidToken || $0 == .forbidden }
+            let rateError = apiErrors.compactMap(\.retryDeadline).max().map { GitHubAPIError.rateLimitedUntil($0) }
+                ?? (apiErrors.contains(.rateLimited) ? .rateLimited : nil)
+            var state = syncStates[row.id] ?? .init()
+            state.failed(rateError ?? authError ?? errors[0], time: scheduler.clock.now(), date: now(), jitter: jitter())
+            if authError != nil { state.requiresAttention = true; state.retryAt = nil }
+            syncStates[row.id] = state
         } else {
             syncStates[row.id] = ConnectionSyncState(succeededAt: scheduler.clock.now())
         }
@@ -347,6 +359,7 @@ final class PullRequestDashboard {
             var state = isReview ? source.reviews : source.authored
             if error is CancellationError {
                 state.phase = state.result == nil ? .idle : .loaded
+                flightErrors[id, default: []].append(GitHubAPIError.networkUnavailable)
             } else {
                 state.phase = .failed
                 state.errorMessage = Self.message(for: error)
