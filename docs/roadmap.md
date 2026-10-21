@@ -1,0 +1,61 @@
+# Development roadmap
+
+Only Phase 1 is implemented. Later phases describe planned scope, not existing
+features. Keep each phase independently buildable and validate before moving on.
+
+## 1. Project foundation
+
+- Native Swift 6 / SwiftUI Xcode app targeting macOS 14+, with strict concurrency.
+- MenuBarExtra popover, disconnected state, inactive Refresh, Settings, and Quit.
+- Native Settings scene with connection status and bundle version/build.
+- No persistent Dock icon, dependencies, network access, or persistence.
+- Acceptance: build succeeds; validate the signed bundle and manually verify
+  launch, Settings reopening, light/dark appearance, and clean quit.
+
+## 2. GitHub authentication
+
+- Choose a GitHub authentication flow compatible with sandboxed macOS apps.
+- Use minimal scopes, store credentials in Keychain, and provide disconnect.
+- Acceptance: connection succeeds, cancellation/failure is recoverable, credentials
+  never appear in logs or plain-text storage, and disconnect removes credentials.
+- Test credential handling and connection state transitions before integration.
+
+## 3. GitHub data access and pull requests
+
+- Add asynchronous GitHub access for review requests and the user's open PRs.
+- Enable outbound networking only when this phase needs it.
+- Acceptance: real PRs load; empty, loading, error, pagination, expired-auth, and
+  rate-limit states behave correctly. Refresh performs a user-initiated update.
+
+## 4. Reviews and relevant activity
+
+- Show approvals, requested changes, comments, mentions, and relevant activity.
+- Acceptance: items link to the correct GitHub destination, show their source and
+  time, and avoid duplicate or unrelated activity. No fabricated activity.
+
+## 5. CI and checks
+
+- Add check status for tracked PRs, including pending, success, and failure.
+- Acceptance: multiple checks and missing data are represented accurately;
+  transitions and links to failed checks are verified against real GitHub data.
+
+## 6. Background updates and native notifications
+
+- Add cancellable, rate-aware polling and opt-in macOS notifications.
+- Acceptance: only meaningful new events notify; repeated polls do not duplicate
+  alerts; sleep/wake, offline recovery, permission denial, and quit behave cleanly.
+
+## 7. Preferences and reliability
+
+- Add repository selection and notification preferences with persistence.
+- Acceptance: choices survive restart and apply to filtering/alerts; credential
+  boundaries remain intact; error recovery, accessibility, and resource usage
+  are tested with representative workloads. No unnecessary idle work.
+
+## 8. Distribution and release readiness
+
+- Prepare GitHub Releases, Homebrew, and Mac App Store distribution.
+- Choose an open-source license; add release assets, signing/notarization,
+  reproducible release checks, and required privacy/store metadata.
+- Acceptance: clean machines can install, launch, upgrade, and uninstall supported
+  builds; Developer ID and sandboxed App Store paths are validated independently.
