@@ -66,4 +66,29 @@ struct GitHubPullRequestTests {
         let status = try JSONDecoder().decode(GitHubCheckStatus.self, from: Data("\"\(value)\"".utf8))
         #expect(status.rawValue == value)
     }
+
+    @Test(arguments: [
+        "http://github.com/a/b/pull/1", "https://example.com/a/b/pull/1",
+        "https://github.com.example.com/a/b/pull/1", "https://user@github.com/a/b/pull/1",
+        "https://github.com:443/a/b/pull/1", "javascript:alert(1)",
+        "/a/b/pull/1", "https://github.com/a/b/issues/1", "https://github.com/a/b/pull/2",
+        "https://github.com/a/b/pull/1?redirect=https://example.com", "https://github.com/a/b/pull/1#fragment",
+        "https://github.com/a/b/pull/1/extra", "https://github.com//b/pull/1"
+    ])
+    func rejectsUnsafeBrowserDestinations(value: String) throws {
+        #expect(makePR(url: try #require(URL(string: value))).browserURL == nil)
+    }
+
+    @Test func opensCanonicalURLWithoutUsingDisplayMetadata() {
+        let url = URL(string: "https://github.com/a/b/pull/1")!
+        #expect(makePR(url: url).browserURL == url)
+    }
+
+    private func makePR(url: URL) -> GitHubPullRequest {
+        GitHubPullRequest(id: "pr", number: 1, title: "Untrusted title https://example.com",
+                          url: url, repository: GitHubRepository(id: "repo", nameWithOwner: "other/name",
+                                                                 url: URL(string: "https://github.com/other/name")!),
+                          authorLogin: nil, isDraft: false, createdAt: .distantPast, updatedAt: .distantPast,
+                          reviewStatus: nil, latestReviews: nil, checkStatus: nil, reviewRequests: nil)
+    }
 }

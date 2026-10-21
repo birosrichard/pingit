@@ -23,6 +23,17 @@ struct GitHubPullRequest: Codable, Equatable, Sendable, Identifiable {
     let latestReviews: GitHubLatestReviews?
     let checkStatus: GitHubCheckStatus?
     let reviewRequests: [GitHubReviewRequest]?
+
+    // Revalidate at the browser boundary, including values decoded outside discovery.
+    var browserURL: URL? {
+        let parts = url.path.split(separator: "/", omittingEmptySubsequences: false)
+        guard url.scheme?.lowercased() == "https", url.host?.lowercased() == "github.com",
+              url.user == nil, url.password == nil, url.port == nil,
+              url.query == nil, url.fragment == nil,
+              parts.count == 5, parts[0].isEmpty, !parts[1].isEmpty, !parts[2].isEmpty,
+              parts[3] == "pull", number > 0, parts[4] == String(number) else { return nil }
+        return url
+    }
 }
 
 enum GitHubReviewStatus: String, Codable, Sendable {
