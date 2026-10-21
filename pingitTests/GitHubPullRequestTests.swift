@@ -383,6 +383,7 @@ struct PullRequestCheckMergeTests {
             #expect(result.pullRequests.first?.headRefOid == nil)
             #expect(result.pullRequests.first?.checkStatus == .unknown)
             #expect(result.pullRequests.first?.checks?.limitation == .conflicting)
+            #expect(result.pullRequests.first?.currentChecks?.limitation == .conflicting)
             #expect(result.coverageLimitations.contains(.conflictingMetadata))
         }
     }
@@ -403,6 +404,8 @@ struct PullRequestCheckMergeTests {
         value.headRefOid = "b"
         #expect(value.checkStatus == .unknown)
         #expect(value.currentChecks?.limitation == .headMismatch)
+        value.headRefOid = nil
+        #expect(value.checkStatus == .unknown && value.currentChecks?.limitation == .unavailable)
     }
 }
 

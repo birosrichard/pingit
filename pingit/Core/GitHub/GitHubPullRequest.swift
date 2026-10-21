@@ -43,7 +43,10 @@ struct GitHubPullRequest: Codable, Equatable, Sendable, Identifiable {
     var checks: GitHubCheckSnapshot? = nil
     var currentChecks: GitHubCheckSnapshot? {
         guard let checks else { return nil }
-        guard let headRefOid, checks.headOid == headRefOid else {
+        guard let headRefOid else {
+            return .unavailable(headOid: nil, reason: checks.limitation ?? .unavailable)
+        }
+        guard checks.headOid == headRefOid else {
             return .unavailable(headOid: headRefOid, reason: .headMismatch)
         }
         return checks
