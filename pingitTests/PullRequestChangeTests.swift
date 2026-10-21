@@ -286,6 +286,7 @@ struct PullRequestChangeTests {
         f.memory.data = try JSONEncoder().encode(snapshot)
         let future = PullRequestChangeDetector(store: f.memory.store)
         #expect(await future.process(f.input(1, authored: [f.pr(time: 2)]), generation: 1).events.isEmpty)
+        #expect(try f.memory.store.load()?.epoch != snapshot.epoch)
         snapshot.version = 1
         snapshot.identity = "invalid"
         f.memory.data = try JSONEncoder().encode(snapshot)
@@ -348,8 +349,11 @@ struct PullRequestChangeTests {
     }
 
     @Test func paginationOrderingAndEventIDsAreStable() async {
-        let f = ChangesFixture(), a = PullRequestChangeDetector(store: fMemory()), b = PullRequestChangeDetector(store: fMemory())
-        for d in [a, b] { _ = await d.process(f.input(1, authored: [f.pr(draft: true), f.pr("PR_2", draft: true)]), generation: 1) }
+        let f = ChangesFixture(), other = SnapshotMemory()
+        let a = PullRequestChangeDetector(store: f.memory.store)
+        _ = await a.process(f.input(1, authored: [f.pr(draft: true), f.pr("PR_2", draft: true)]), generation: 1)
+        other.data = f.memory.data
+        let b = PullRequestChangeDetector(store: other.store)
         let first = await a.process(f.input(2, authored: [f.pr(time: 2), f.pr("PR_2", time: 2)]), generation: 1)
         let second = await b.process(f.input(2, authored: [f.pr("PR_2", time: 2), f.pr(time: 2)]), generation: 1)
         #expect(first.events.map(\.id) == second.events.map(\.id))

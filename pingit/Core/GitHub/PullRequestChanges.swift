@@ -27,6 +27,7 @@ struct PullRequestChangeSnapshot: Codable, Equatable, Sendable {
     static let schemaVersion = 1
     var version = schemaVersion
     var identity: String
+    var epoch = UUID()
     var revision: UInt64 = 0
     var sources: [String: Source] = [:]
     var rebasingRepositories: [String] = []

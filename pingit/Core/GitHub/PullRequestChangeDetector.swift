@@ -159,7 +159,7 @@ actor PullRequestChangeDetector {
             let actor = reviewer.flatMap { key in
                 pr?.latestReviews?.reviews.first { $0.authorLogin.map { changeDigest($0.lowercased()) } == key }?.authorLogin
             }
-            let identity = [next.identity, String(next.revision), id, kind.rawValue, reviewer ?? ""].joined(separator: "|")
+            let identity = [next.identity, next.epoch.uuidString, String(next.revision), id, kind.rawValue, reviewer ?? ""].joined(separator: "|")
             events.append(.init(id: changeDigest(identity), kind: kind, pullRequestID: id,
                                 repository: repository, number: state.number, title: pr?.title, url: url,
                                 observedAt: input.observedAt, actorLogin: actor, signal: signal,
