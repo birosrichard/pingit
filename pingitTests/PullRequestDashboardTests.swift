@@ -762,3 +762,26 @@ struct DiscoveryCoveragePresentationTests {
         #expect(!DiscoveryCoveragePresentation(sections: [success], errors: []).isWarning)
     }
 }
+
+extension DiscoveryCoveragePresentationTests {
+    @Test func unavailableChecksAloneDoNotWarnOrAdvertiseHiddenCI() {
+        let state = PullRequestSectionState(phase: .loaded, result: .init(pullRequests: [],
+            truncationReasons: [], coverageLimitations: [.tokenVisibility, .checkDataUnavailable]))
+        let display = DiscoveryCoveragePresentation(sections: [state], errors: [])
+        #expect(!display.isWarning && display.label == "Discovery info")
+        #expect(display.details.contains("visible to your tokens"))
+        #expect(!display.details.contains("CI") && !display.details.contains("Checks"))
+        // Raw CI coverage remains available for a future authentication/UI strategy.
+        #expect(state.result?.coverageLimitations.contains(.checkDataUnavailable) == true)
+    }
+
+    @Test func unavailableChecksNeverMaskDiscoveryFailuresOrTruncation() {
+        let state = PullRequestSectionState(phase: .loaded, result: .init(pullRequests: [],
+            truncationReasons: [.pageLimit], coverageLimitations: [.checkDataUnavailable]))
+        #expect(DiscoveryCoveragePresentation(sections: [state], errors: []).isWarning)
+        let failure = PullRequestSectionState(phase: .failed, result: state.result, errorMessage: "Organization: GitHub returned incomplete data")
+        let display = DiscoveryCoveragePresentation(sections: [failure], errors: [])
+        #expect(display.label == "GitHub needs attention")
+        #expect(display.details.contains("Organization: GitHub returned incomplete data"))
+    }
+}

@@ -527,7 +527,7 @@ struct GitHubPullRequestDiscoveryTests {
         let result = try await authored(Script([payload([value])]).http)
         #expect(result.pullRequests.first?.checkStatus == .unknown)
         #expect(result.coverageLimitations.contains(.checkDataUnavailable))
-        #expect(PullRequestSectionState(phase: .loaded, result: result).coverageMessages.contains { $0.contains("CI data") })
+        #expect(!PullRequestSectionState(phase: .loaded, result: result).coverageMessages.contains { $0.contains("CI data") })
     }
 
     @Test func unrelatedGraphQLErrorsAndRateLimitsStillFailTheSource() async throws {

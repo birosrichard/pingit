@@ -130,7 +130,7 @@ struct MenuBarView: View {
                 ScrollView {
                     LazyVStack(spacing: 0) {
                         ForEach(pullRequests) { pr in
-                            PullRequestRow(pr: pr, showsAuthor: selection == .review, isPrevious: state.phase != .loaded)
+                            PullRequestRow(pr: pr, showsAuthor: selection == .review)
                             if pr.id != pullRequests.last?.id {
                                 Divider().padding(.leading, 58).padding(.trailing, 12)
                             }
@@ -289,10 +289,6 @@ struct MenuBarView: View {
 private struct PullRequestRow: View {
     let pr: GitHubPullRequest
     let showsAuthor: Bool
-    let isPrevious: Bool
-    private var checkDisplay: PullRequestCheckPresentation {
-        .init(snapshot: pr.currentChecks, isPrevious: isPrevious)
-    }
     @State private var isHovered = false
 
     var body: some View {
@@ -300,7 +296,7 @@ private struct PullRequestRow: View {
             if let url = pr.browserURL {
                 Link(destination: url) { content }
                     .buttonStyle(.plain)
-                    .help("\(pr.title)\n\(pr.repository.nameWithOwner) #\(pr.number)\n\(pr.reviewPresentation.detail)\n\(pr.diffStatistics?.accessibilityLabel ?? "Diff statistics unavailable")\n\(checkDisplay.detail)")
+                    .help("\(pr.title)\n\(pr.repository.nameWithOwner) #\(pr.number)\n\(pr.reviewPresentation.detail)\n\(pr.diffStatistics?.accessibilityLabel ?? "Diff statistics unavailable")")
             } else {
                 content.help("This pull request has an invalid GitHub URL.")
             }
@@ -336,19 +332,8 @@ private struct PullRequestRow: View {
                     VStack(alignment: .leading, spacing: 4) { metadata }
                 }
                 .font(.system(size: 12))
-                ViewThatFits(in: .horizontal) {
-                    HStack(spacing: 8) {
-                        diffMetadata
-                        Text("·").foregroundStyle(.tertiary).accessibilityHidden(true)
-                        checkMetadata
-                    }
-                    .fixedSize(horizontal: true, vertical: false)
-                    VStack(alignment: .leading, spacing: 4) {
-                        diffMetadata
-                        checkMetadata
-                    }
-                }
-                .font(.system(size: 11))
+                diffMetadata
+                    .font(.system(size: 11))
                 if pr.browserURL == nil {
                     Label("GitHub link unavailable", systemImage: "link")
                         .font(.caption).foregroundStyle(.secondary)
@@ -405,12 +390,4 @@ private struct PullRequestRow: View {
         }
     }
 
-    private var checkMetadata: some View {
-        Label(checkDisplay.label, systemImage: checkDisplay.systemImage)
-            .foregroundStyle(metadataColor(checkDisplay.tone))
-            .lineLimit(1)
-            .truncationMode(.tail)
-            .help(checkDisplay.detail)
-            .accessibilityLabel("\(checkDisplay.label). \(checkDisplay.detail)")
-    }
 }
