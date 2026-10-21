@@ -25,7 +25,7 @@ struct GitHubPullRequestDiscoveryTests {
         #expect(request.query.contains("type: ISSUE"))
         #expect(request.query.contains("createdAt updatedAt"))
         #expect(request.query.contains("reviewDecision"))
-        #expect(!request.query.contains("statusCheckRollup"))
+        #expect(request.query.contains("statusCheckRollup"))
         #expect(request.query.contains("latestReviews(first: 50)"))
         #expect(!request.query.contains("reviews(first:"))
         let pr = try #require(result.pullRequests.first)
@@ -39,7 +39,7 @@ struct GitHubPullRequestDiscoveryTests {
         #expect(pr.isDraft)
         #expect(pr.createdAt == Date(timeIntervalSince1970: 1_792_486_800))
         #expect(pr.updatedAt == Date(timeIntervalSince1970: 1_792_573_200))
-        #expect(pr.reviewStatus == .unknown && pr.checkStatus == nil && pr.reviewRequests == nil)
+        #expect(pr.reviewStatus == .unknown && pr.checkStatus == .unknown && pr.reviewRequests == nil)
         #expect(pr.latestReviews == GitHubLatestReviews(reviews: [], limitations: []))
         #expect(!result.isTruncated)
         #expect(result.coverageLimitations == [.tokenVisibility])
@@ -465,6 +465,71 @@ struct GitHubPullRequestDiscoveryTests {
         var value = node()
         value["changedFiles"] = 0; value["additions"] = 0
         #expect(try await authored(Script([payload([value])]).http).pullRequests.first?.diffStatistics == nil)
+    }
+
+    private func checkedNode(head: String = "head", commit: String = "head") -> [String: Any] {
+        var value = node()
+        value["headRefOid"] = head
+        value["changedFiles"] = 1; value["additions"] = 2; value["deletions"] = 3
+        value["commits"] = ["nodes": [["commit": ["oid": commit, "statusCheckRollup": [
+            "state": "SUCCESS", "contexts": ["totalCount": 2, "checkRunCount": 1, "statusContextCount": 1,
+                "checkRunCountsByState": [["state": "SUCCESS", "count": 1]],
+                "statusContextCountsByState": [["state": "SUCCESS", "count": 1]]]
+        ]]]]]
+        return value
+    }
+
+    @Test func currentHeadChecksAndLegacyCountsUseTheExistingRequest() async throws {
+        let script = Script([try payload([checkedNode()])])
+        let result = try await authored(script.http)
+        #expect(result.pullRequests.first?.checkStatus == .success)
+        #expect(result.pullRequests.first?.checks?.headOid == "head")
+        #expect(script.requests.count == 1)
+        let query = try #require(script.requests.first?.query)
+        #expect(query.contains("commits(last: 1)"))
+        #expect(query.contains("contexts(first: 1)"))
+        #expect(query.contains("checkRunCountsByState { state count }"))
+        #expect(query.contains("statusContextCountsByState { state count }"))
+        #expect(!query.contains("headRef {") && !query.contains("checkSuites("))
+    }
+
+    @Test func headMismatchAndMissingCommitNeverReuseChecks() async throws {
+        let mismatch = try await authored(Script([payload([checkedNode(head: "new", commit: "old")])]).http)
+        #expect(mismatch.pullRequests.first?.checkStatus == .unknown)
+        #expect(mismatch.pullRequests.first?.checks?.limitation == .headMismatch)
+        for commits: Any in [NSNull(), ["nodes": []], ["nodes": [NSNull()]]] {
+            var value = checkedNode()
+            value["commits"] = commits
+            #expect(try await authored(Script([payload([value])]).http).pullRequests.first?.checkStatus == .unknown)
+        }
+    }
+
+    @Test func deniedCheckFieldsPreservePRAndDiffButDiscardTheWholeRollup() async throws {
+        for field in ["state", "contexts"] {
+            var envelope = try #require(try JSONSerialization.jsonObject(with: Data(payload([checkedNode()]).utf8)) as? [String: Any])
+            envelope["errors"] = [["message": "Resource not accessible by integration", "type": "FORBIDDEN",
+                                   "path": ["search", "nodes", 0, "commits", "nodes", 0, "commit", "statusCheckRollup", field]]]
+            let body = String(decoding: try JSONSerialization.data(withJSONObject: envelope), as: UTF8.self)
+            let script = Script([body])
+            let result = try await authored(script.http)
+            #expect(result.pullRequests.first?.checkStatus == .unknown)
+            #expect(result.pullRequests.first?.checks?.limitation == .unavailable)
+            #expect(result.pullRequests.first?.diffStatistics?.additions == 2)
+            #expect(script.requests.count == 1)
+        }
+    }
+
+    @Test func unrelatedGraphQLErrorsAndRateLimitsStillFailTheSource() async throws {
+        for (path, type, expected): ([Any], String, GitHubAPIError) in [
+            (["search", "nodes", 0, "reviewDecision"], "FORBIDDEN", .partialData),
+            (["search", "nodes", 0, "commits", "nodes", 0, "commit", "statusCheckRollup"], "RATE_LIMITED", .rateLimited),
+            ([], "FORBIDDEN", .partialData)
+        ] {
+            var envelope = try #require(try JSONSerialization.jsonObject(with: Data(payload([checkedNode()]).utf8)) as? [String: Any])
+            envelope["errors"] = [["message": "Sanitized", "type": type, "path": path]]
+            let body = String(decoding: try JSONSerialization.data(withJSONObject: envelope), as: UTF8.self)
+            await #expect(throws: expected) { try await authored(Script([body]).http) }
+        }
     }
 
     private func node(

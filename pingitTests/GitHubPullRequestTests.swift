@@ -8,7 +8,7 @@ struct GitHubPullRequestTests {
           "id":"PR_1", "number":42, "title":"Fix menu bar", "url":"https://github.com/octocat/pingit/pull/42",
           "repository":{"id":"R_1", "nameWithOwner":"octocat/pingit", "url":"https://github.com/octocat/pingit"},
           "authorLogin":"octocat", "isDraft":true, "createdAt":"2026-10-20T09:00:00Z", "updatedAt":"2026-10-21T09:00:00Z",
-          "reviewStatus":"changesRequested", "checkStatus":"pending",
+          "reviewStatus":"changesRequested", "checks":{"headOid":"abc","status":"pending","detailsComplete":false},
           "reviewRequests":[{"user":{"login":"reviewer"}},{"team":{"organizationLogin":"acme","slug":"macos"}}]
         }
         """#
@@ -89,7 +89,7 @@ struct GitHubPullRequestTests {
                           url: url, repository: GitHubRepository(id: "repo", nameWithOwner: "other/name",
                                                                  url: URL(string: "https://github.com/other/name")!),
                           authorLogin: nil, isDraft: false, createdAt: .distantPast, updatedAt: .distantPast,
-                          reviewStatus: nil, latestReviews: nil, checkStatus: nil, reviewRequests: nil)
+                          reviewStatus: nil, latestReviews: nil, checks: nil, reviewRequests: nil)
     }
 }
 
@@ -128,7 +128,7 @@ extension GitHubPullRequestTests {
         let pr = GitHubPullRequest(id: "age", number: 1, title: "Title", url: URL(string: "https://github.com/a/b/pull/1")!,
             repository: GitHubRepository(id: "r", nameWithOwner: "a/b", url: URL(string: "https://github.com/a/b")!),
             authorLogin: nil, isDraft: false, createdAt: .distantPast, updatedAt: Date(timeIntervalSince1970: 0),
-            reviewStatus: nil, latestReviews: nil, checkStatus: nil, reviewRequests: nil)
+            reviewStatus: nil, latestReviews: nil, checks: nil, reviewRequests: nil)
         #expect(pr.compactUpdatedAge(relativeTo: Date(timeIntervalSince1970: seconds)) == expected)
     }
 }
@@ -222,7 +222,7 @@ extension PullRequestDiffStatisticsTests {
             GitHubPullRequest(id: "pr", number: 1, title: "Title", url: URL(string: "https://github.com/a/b/pull/1")!,
                 repository: .init(id: "r", nameWithOwner: "a/b", url: URL(string: "https://github.com/a/b")!),
                 authorLogin: nil, isDraft: false, createdAt: .distantPast, updatedAt: Date(timeIntervalSince1970: updated),
-                reviewStatus: nil, latestReviews: nil, checkStatus: nil, reviewRequests: nil,
+                reviewStatus: nil, latestReviews: nil, checks: nil, reviewRequests: nil,
                 headRefOid: head, diffStatistics: GitHubDiffStatistics(changedFiles: 1, additions: additions, deletions: 0))
         }
         func merge(_ values: [GitHubPullRequest]) -> GitHubPullRequestDiscoveryResult {
@@ -241,5 +241,87 @@ extension PullRequestDiffStatisticsTests {
         let conflict = merge([complete, pr(head: "a", additions: 13), complete])
         #expect(conflict.pullRequests.first?.diffStatistics == nil)
         #expect(conflict.coverageLimitations.contains(.conflictingMetadata))
+    }
+}
+
+struct PullRequestChecksTests {
+    typealias Counts = GitHubPullRequestSearchResponse.CheckCounts
+
+    private func rollup(_ state: String?, runs: [String: Int] = [:], statuses: [String: Int] = [:],
+                        total: Int? = nil, complete: Bool = true) -> GitHubCheckSnapshot {
+        GitHubPullRequestSearchResponse.CheckRollup(state: state, contexts: Counts(
+            totalCount: total ?? (runs.values.reduce(0, +) + statuses.values.reduce(0, +)),
+            checkRunCount: runs.values.reduce(0, +), statusContextCount: statuses.values.reduce(0, +),
+            checkRunCountsByState: complete ? runs.map { .init(state: $0.key, count: $0.value) } : nil,
+            statusContextCountsByState: statuses.map { .init(state: $0.key, count: $0.value) }
+        )).domain(headOid: "head")
+    }
+
+    @Test func checksAndLegacyStatusesShareOneRollup() {
+        #expect(rollup("SUCCESS", runs: ["SUCCESS": 12], statuses: ["SUCCESS": 2]).status == .success)
+        #expect(rollup("SUCCESS", statuses: ["SUCCESS": 1]).status == .success)
+        #expect(rollup("FAILURE", statuses: ["ERROR": 1, "SUCCESS": 1]).failingCount == 1)
+        #expect(rollup("PENDING", statuses: ["PENDING": 2]).status == .pending)
+    }
+
+    @Test(arguments: ["FAILURE", "TIMED_OUT", "STARTUP_FAILURE", "ACTION_REQUIRED"])
+    func failuresAreNeverHidden(state: String) {
+        let result = rollup("FAILURE", runs: [state: 2, "SUCCESS": 3, "IN_PROGRESS": 1])
+        #expect(result.status == .failure && result.failingCount == 2 && result.detailsComplete)
+        let contradiction = rollup("SUCCESS", runs: [state: 1, "SUCCESS": 20])
+        #expect(contradiction.status == .failure && contradiction.failingCount == nil)
+        #expect(!contradiction.detailsComplete)
+    }
+
+    @Test(arguments: ["PENDING", "QUEUED", "IN_PROGRESS", "WAITING"])
+    func pendingCannotPass(state: String) {
+        #expect(rollup("PENDING", runs: [state: 1]).status == .pending)
+        #expect(rollup("PENDING", runs: [state: 1, "SUCCESS": 5]).status == .pending)
+        #expect(rollup("SUCCESS", runs: [state: 1, "SUCCESS": 5]).status == .pending)
+        #expect(rollup("FAILURE", runs: [state: 1, "FAILURE": 1]).status == .failure)
+    }
+
+    @Test func cancellationAndNeutralConclusionsNeverSupplySuccess() {
+        #expect(rollup("FAILURE", runs: ["CANCELLED": 1]).status == .cancelled)
+        #expect(rollup("SUCCESS", runs: ["CANCELLED": 1, "SUCCESS": 1]).status == .cancelled)
+        #expect(rollup("PENDING", runs: ["CANCELLED": 1, "IN_PROGRESS": 1]).status == .pending)
+        for state in ["SKIPPED", "NEUTRAL"] {
+            #expect(rollup("SUCCESS", runs: [state: 1]).status == .skipped)
+            #expect(rollup("SUCCESS", runs: [state: 1, "SUCCESS": 1]).status == .skipped)
+        }
+        #expect(rollup("FAILURE", runs: ["FAILURE": 1, "CANCELLED": 1]).status == .failure)
+    }
+
+    @Test func emptyAndUnavailableAreDistinct() {
+        #expect(rollup("PENDING").status == .noChecks)
+        #expect(rollup("SUCCESS").status == .noChecks)
+        let unavailable = GitHubPullRequestSearchResponse.CheckRollup(state: nil, contexts: nil).domain(headOid: "head")
+        #expect(unavailable.status == .unknown && unavailable.failingCount == nil)
+        #expect(GitHubCheckSnapshot.unavailable(headOid: "head").status == .unknown)
+    }
+
+    @Test func incompleteCountsAndFutureStatesCannotPass() {
+        for result in [rollup("SUCCESS", runs: ["SUCCESS": 1], total: 2),
+                       rollup("SUCCESS", runs: ["SUCCESS": 1], complete: false),
+                       rollup("FUTURE", runs: ["SUCCESS": 1]),
+                       rollup("SUCCESS", runs: ["FUTURE": 1]),
+                       rollup("SUCCESS", runs: ["STALE": 1]),
+                       rollup("SUCCESS", runs: ["COMPLETED": 1])] {
+            #expect(result.status == .unknown && !result.detailsComplete && result.failingCount == nil)
+        }
+        #expect(rollup("FAILURE", runs: ["FAILURE": 2], total: 3).failingCount == nil)
+        #expect(rollup("FAILURE", complete: false).status == .failure)
+        #expect(rollup("PENDING", complete: false).status == .pending)
+    }
+
+    @Test func malformedCountersNeverSupplySuccessOrInventExactCounts() {
+        for entries in [[Counts.StateCount(state: "SUCCESS", count: -1)],
+                        [.init(state: "SUCCESS", count: 1), .init(state: "SUCCESS", count: 1)],
+                        [.init(state: "SUCCESS", count: Int.max)]] {
+            let counts = Counts(totalCount: 2, checkRunCount: 2, statusContextCount: 0,
+                                checkRunCountsByState: entries, statusContextCountsByState: [])
+            let snapshot = GitHubPullRequestSearchResponse.CheckRollup(state: "SUCCESS", contexts: counts).domain(headOid: "head")
+            #expect(snapshot.status == .unknown && !snapshot.detailsComplete && snapshot.failingCount == nil)
+        }
     }
 }

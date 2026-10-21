@@ -377,7 +377,7 @@ private struct PullRequestRow: View {
             Label("Checks failing", systemImage: "xmark.circle.fill").foregroundStyle(.red)
         case .pending:
             Label("Checks pending", systemImage: "clock").foregroundStyle(.orange)
-        case nil:
+        case .cancelled, .skipped, .noChecks, .unknown, nil:
             EmptyView()
         }
     }

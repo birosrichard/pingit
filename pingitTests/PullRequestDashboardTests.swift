@@ -300,7 +300,7 @@ struct PullRequestDashboardTests {
                                   repository: GitHubRepository(id: "repo", nameWithOwner: "a/b", url: URL(string: "https://github.com/a/b")!),
                                   authorLogin: review ? "review-author" : account.login, isDraft: false,
                                   createdAt: .distantPast, updatedAt: .distantPast, reviewStatus: .approved,
-                                  latestReviews: nil, checkStatus: nil, reviewRequests: nil)
+                                  latestReviews: nil, checks: nil, reviewRequests: nil)
         return GitHubPullRequestDiscoveryResult(pullRequests: [pr], truncationReasons: truncated ? [.resultLimit] : [],
                                                 coverageLimitations: review ? [.tokenVisibility, .directReviewRequestsOnly] : [.tokenVisibility])
     }
@@ -580,7 +580,7 @@ struct MultiTokenDashboardTests {
         GitHubPullRequest(id: id, number: 1, title: "Same title", url: URL(string: "https://github.com/a/b/pull/1")!,
                           repository: GitHubRepository(id: "repo", nameWithOwner: "a/b", url: URL(string: "https://github.com/a/b")!),
                           authorLogin: author, isDraft: false, createdAt: .distantPast, updatedAt: updated,
-                          reviewStatus: decision, latestReviews: nil, checkStatus: nil, reviewRequests: nil)
+                          reviewStatus: decision, latestReviews: nil, checks: nil, reviewRequests: nil)
     }
 
     private func result(_ prs: [GitHubPullRequest], reasons: Set<GitHubPullRequestDiscoveryResult.TruncationReason> = []) -> GitHubPullRequestDiscoveryResult {
@@ -614,7 +614,7 @@ extension MultiTokenDashboardTests {
             GitHubPullRequest(id: base.id, number: base.number, title: base.title, url: base.url,
                 repository: base.repository, authorLogin: base.authorLogin, isDraft: base.isDraft,
                 createdAt: base.createdAt, updatedAt: base.updatedAt, reviewStatus: .unknown,
-                latestReviews: .init(reviews: reviews, limitations: limitations), checkStatus: nil, reviewRequests: nil)
+                latestReviews: .init(reviews: reviews, limitations: limitations), checks: nil, reviewRequests: nil)
         }
         let approval = GitHubPullRequestReview(id: "a", authorLogin: "bot[bot]", state: .approved)
         let comment = GitHubPullRequestReview(id: "b", authorLogin: "bob", state: .commented)
@@ -645,7 +645,7 @@ extension MultiTokenDashboardTests {
             GitHubPullRequest(id: base.id, number: base.number, title: base.title, url: base.url,
                               repository: base.repository, authorLogin: base.authorLogin, isDraft: base.isDraft,
                               createdAt: base.createdAt, updatedAt: base.updatedAt, reviewStatus: base.reviewStatus,
-                              latestReviews: details, checkStatus: nil, reviewRequests: nil)
+                              latestReviews: details, checks: nil, reviewRequests: nil)
         }
         let complete = GitHubLatestReviews(reviews: [GitHubPullRequestReview(id: "r", authorLogin: "reviewer", state: .approved)], limitations: [])
         let unavailable = GitHubLatestReviews(reviews: [], limitations: [.unavailable])
@@ -665,7 +665,7 @@ struct PullRequestInboxTests {
             GitHubPullRequest(id: id, number: 1, title: "Title", url: URL(string: "https://github.com/a/b/pull/1")!,
                               repository: GitHubRepository(id: "r", nameWithOwner: "a/b", url: URL(string: "https://github.com/a/b")!),
                               authorLogin: "a", isDraft: draft, createdAt: .distantPast, updatedAt: .distantPast,
-                              reviewStatus: nil, latestReviews: nil, checkStatus: nil, reviewRequests: nil)
+                              reviewStatus: nil, latestReviews: nil, checks: nil, reviewRequests: nil)
         }
         let state = PullRequestSectionState(phase: .failed,
             result: GitHubPullRequestDiscoveryResult(pullRequests: [pr("open", draft: false), pr("draft", draft: true)],

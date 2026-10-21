@@ -40,7 +40,8 @@ struct GitHubPullRequest: Codable, Equatable, Sendable, Identifiable {
     // nil means not loaded/available, rather than no reviews or successful CI.
     let reviewStatus: GitHubReviewStatus?
     let latestReviews: GitHubLatestReviews?
-    let checkStatus: GitHubCheckStatus?
+    var checks: GitHubCheckSnapshot? = nil
+    var checkStatus: GitHubCheckStatus? { checks?.status }
     let reviewRequests: [GitHubReviewRequest]?
     var headRefOid: String? = nil
     var diffStatistics: GitHubDiffStatistics? = nil
@@ -68,6 +69,10 @@ enum GitHubCheckStatus: String, Codable, Sendable {
     case pending
     case success
     case failure
+    case cancelled
+    case skipped
+    case noChecks
+    case unknown
 }
 
 enum GitHubReviewRequest: Codable, Equatable, Sendable {
@@ -202,5 +207,22 @@ struct GitHubDiffStatistics: Codable, Equatable, Sendable {
 
     private static func compact(_ value: Int) -> String {
         value.formatted(.number.notation(.compactName).precision(.fractionLength(0...1)).locale(Locale(identifier: "en_US")))
+    }
+}
+
+// CI evidence describes only a validated PR head; reviews and mergeability stay independent.
+struct GitHubCheckSnapshot: Codable, Equatable, Sendable {
+    let headOid: String?
+    let status: GitHubCheckStatus
+    let failingCount: Int?
+    let detailsComplete: Bool
+    let limitation: Limitation?
+
+    enum Limitation: String, Codable, Sendable {
+        case unavailable, headMismatch, incomplete, unknownState, conflicting
+    }
+
+    static func unavailable(headOid: String?, reason: Limitation = .unavailable) -> Self {
+        Self(headOid: headOid, status: .unknown, failingCount: nil, detailsComplete: false, limitation: reason)
     }
 }

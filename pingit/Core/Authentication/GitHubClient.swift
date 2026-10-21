@@ -101,6 +101,7 @@ struct GitHubClient: Sendable {
         query: String,
         variables: Variables,
         token: String,
+        recoverPartialData: (@Sendable (Data) -> Response?)? = nil,
         as responseType: Response.Type = Response.self
     ) async throws -> Response {
         try Task.checkCancellation()
@@ -138,6 +139,10 @@ struct GitHubClient: Sendable {
         if let errors = metadata.errors, !errors.isEmpty {
             if isRateLimited(response) || errors.contains(where: { $0.isRateLimited }) {
                 throw GitHubAPIError.rateLimited
+            }
+            if metadata.hasData, let recovered = recoverPartialData?(data) {
+                try Task.checkCancellation()
+                return recovered
             }
             throw metadata.hasData ? GitHubAPIError.partialData : GitHubAPIError.graphQLFailure
         }

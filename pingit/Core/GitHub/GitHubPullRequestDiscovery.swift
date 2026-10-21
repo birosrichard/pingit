@@ -81,7 +81,8 @@ struct GitHubPullRequestDiscovery: Sendable {
             let first = min(50, maximumResults - values.count, 1000 - scanned)
             let variables = Variables(query: query, first: first, after: cursor, includeReviewRequests: reviewRequests)
             let response: GitHubPullRequestSearchResponse = try await client.graphQL(
-                query: GitHubPullRequestSearchResponse.query, variables: variables, token: token)
+                query: GitHubPullRequestSearchResponse.query, variables: variables, token: token,
+                recoverPartialData: GitHubPullRequestSearchResponse.recoverUnavailableChecks)
             guard response.viewer.login.caseInsensitiveCompare(login) == .orderedSame else {
                 throw GitHubDiscoveryError.accountMismatch
             }
@@ -196,7 +197,7 @@ extension GitHubPullRequestDiscoveryResult {
                     isDraft: sameSnapshot ? old.isDraft || pr.isDraft : newest.isDraft, createdAt: newest.createdAt, updatedAt: newest.updatedAt,
                     reviewStatus: status,
                     latestReviews: conflictingReviews.contains(pr.id) ? nil : details,
-                    checkStatus: newest.checkStatus,
+                    checks: newest.checks,
                     reviewRequests: conflictingRequests.contains(pr.id) ? nil : newest.reviewRequests ?? (sameSnapshot ? other.reviewRequests : nil))
             }
         }
