@@ -10,22 +10,25 @@ actor PullRequestChangeDetector {
     private var baseline: PullRequestChangeSnapshot?
     private var loaded = false
     private var generation: UInt64 = 0
+    private var lastSequence: UInt64 = 0
 
     init(store: PullRequestSnapshotStore = .init()) { self.store = store }
 
-    func reconcile(scopes: [PullRequestChangeScope], generation: UInt64) {
-        guard generation >= self.generation else { return }
+    @discardableResult
+    func reconcile(scopes: [PullRequestChangeScope], generation: UInt64) -> Bool {
+        guard generation >= self.generation else { return false }
         self.generation = generation
         do {
             try load()
-            guard let old = baseline else { return }
+            guard let old = baseline else { return false }
             let next = reconciled(old, scopes: scopes)
             if old != next { try store.save(next); baseline = next }
-        } catch { /* Retry on the next completed refresh; never publish on a failed commit. */ }
+            return false
+        } catch { return true }
     }
 
     func process(_ input: PullRequestChangeInput, generation: UInt64) -> Output {
-        guard generation >= self.generation, !Task.isCancelled else { return Output() }
+        guard generation >= self.generation, input.sequence > lastSequence, !Task.isCancelled else { return Output() }
         self.generation = generation
         do {
             try load()
@@ -50,13 +53,25 @@ actor PullRequestChangeDetector {
                 }
                 if source.authored != nil || source.requested != nil { next.sources[scope.id] = source }
             }
-            guard next != old || baseline != next else { return Output() }
+            next.rebasingRepositories.removeAll { repository in
+                let scopes = next.sources.filter { _, source in
+                    [source.authored, source.requested].contains { $0?.values.contains { $0.repositoryID == repository } == true }
+                }.keys
+                return !scopes.isEmpty && scopes.allSatisfy {
+                    complete(input.results[$0]?.authored) != nil && complete(input.results[$0]?.requested) != nil
+                }
+            }
+            guard next != old || baseline != next else {
+                lastSequence = input.sequence
+                return Output()
+            }
             guard old.revision < UInt64.max else { return Output(storageFailed: true) }
             next.revision = old.revision + 1
             let events = detect(old: old, next: next, input: input)
             try Task.checkCancellation()
             try store.save(next)
             baseline = next
+            lastSequence = input.sequence
             // Cancellation during a write consumes the transition but never delivers stale events.
             return Output(events: Task.isCancelled ? [] : events)
         } catch is CancellationError { return Output() }
@@ -77,6 +92,9 @@ actor PullRequestChangeDetector {
         }
         var next = old
         let active = Set(scopes.map(\.id))
+        let removed = old.sources.filter { !active.contains($0.key) }.values
+        let affected = removed.flatMap { [$0.authored, $0.requested].compactMap { $0 }.flatMap { $0.values.map(\.repositoryID) } }
+        next.rebasingRepositories = active.isEmpty ? [] : Set(old.rebasingRepositories + affected).sorted()
         next.sources = old.sources.filter { active.contains($0.key) }
         return next
     }
@@ -150,6 +168,7 @@ actor PullRequestChangeDetector {
         for id in Set(requestsBefore.keys).union(requestsAfter.keys).sorted() {
             let before = requestsBefore[id] ?? [:], after = requestsAfter[id] ?? [:]
             guard before.isEmpty != after.isEmpty, let state = after.values.first ?? before.values.first else { continue }
+            guard !old.rebasingRepositories.contains(state.repositoryID) else { continue }
             let scopes = repoSources(next, repository: state.repositoryID)
             guard !scopes.isEmpty, scopes == repoSources(old, repository: state.repositoryID),
                   scopes.allSatisfy({ old.sources[$0]?.requested != nil && complete(input.results[$0]?.requested) != nil }) else { continue }
@@ -161,6 +180,7 @@ actor PullRequestChangeDetector {
                   !before.isEmpty, Set(before.keys) == Set(after.keys),
                   after.keys.allSatisfy({ complete(input.results[$0]?.authored) != nil }),
                   let previous = before.values.first, let current = after.values.first,
+                  !old.rebasingRepositories.contains(current.repositoryID),
                   before.values.allSatisfy({ $0.repositoryID == previous.repositoryID && $0.number == previous.number }),
                   after.values.allSatisfy({ $0.repositoryID == previous.repositoryID && $0.number == previous.number }),
                   after.values.map(\.updatedAt).min()! > before.values.map(\.updatedAt).max()! else { continue }

@@ -85,6 +85,13 @@ final class PullRequestDashboard {
     @ObservationIgnored private var pendingRefresh = false
     @ObservationIgnored private var watchdog: Task<Void, Never>?
     @ObservationIgnored private var flightErrors: [UUID: [any Error]] = [:]
+    @ObservationIgnored private var flightResults: [String: PullRequestChangeInput.Sections] = [:]
+    @ObservationIgnored private let changeDetector: PullRequestChangeDetector?
+    @ObservationIgnored private var connectionGeneration: UInt64 = 0
+    @ObservationIgnored private var refreshSequence: UInt64 = 0
+    // One replaceable consumer, no replay buffer or accumulated activity history.
+    @ObservationIgnored var onChanges: (@MainActor ([PullRequestChangeEvent]) -> Void)?
+    private(set) var changeDetectionStorageFailed = false
 
     @ObservationIgnored private let credential: (String) throws -> String?
     @ObservationIgnored private let fetch: Fetch
@@ -97,7 +104,9 @@ final class PullRequestDashboard {
 
     init(credentials: KeychainCredentialStore = KeychainCredentialStore(),
          discovery: GitHubPullRequestDiscovery = GitHubPullRequestDiscovery(),
+         changeDetector: PullRequestChangeDetector? = nil,
          preferences: BackgroundSyncPreferences = BackgroundSyncPreferences(defaults: .standard)) {
+        self.changeDetector = changeDetector
         syncPreferences = preferences
         scheduler = BackgroundSyncScheduler(clock: .continuous)
         jitter = { Double.random(in: 0...1) }
@@ -112,6 +121,7 @@ final class PullRequestDashboard {
     init(credential: @escaping () throws -> String?, now: @escaping () -> Date = Date.init,
          clock: SyncClock = .continuous, jitter: @escaping () -> Double = { Double.random(in: 0...1) },
          fetch: @escaping Fetch) {
+        changeDetector = nil
         syncPreferences = BackgroundSyncPreferences()
         scheduler = BackgroundSyncScheduler(clock: clock)
         self.jitter = jitter
@@ -122,7 +132,9 @@ final class PullRequestDashboard {
 
     init(scopedCredential: @escaping (String) throws -> String?, now: @escaping () -> Date = Date.init,
          clock: SyncClock = .continuous, jitter: @escaping () -> Double = { Double.random(in: 0...1) },
+         changeDetector: PullRequestChangeDetector? = nil,
          preferences: BackgroundSyncPreferences = BackgroundSyncPreferences(), fetch: @escaping Fetch) {
+        self.changeDetector = changeDetector
         syncPreferences = preferences
         scheduler = BackgroundSyncScheduler(clock: clock)
         self.jitter = jitter
@@ -141,6 +153,15 @@ final class PullRequestDashboard {
     func setConnections(_ rows: [GitHubTokenConnection], refresh shouldRefresh: Bool) {
         guard rows != connections else { return }
         invalidateRefresh()
+        connectionGeneration += 1
+        let generation = connectionGeneration
+        let scopes = rows.compactMap(PullRequestChangeScope.init)
+        if let changeDetector {
+            Task {
+                let failed = await changeDetector.reconcile(scopes: scopes, generation: generation)
+                if connectionGeneration == generation { changeDetectionStorageFailed = failed }
+            }
+        }
         syncStates = Dictionary(uniqueKeysWithValues: rows.map { row in
             let sameCredential = sources[row.id]?.connection.storageAccount == row.storageAccount
             return (row.id, sameCredential ? syncStates[row.id] ?? .init() : .init())
@@ -255,8 +276,10 @@ final class PullRequestDashboard {
         scheduler.cancel()
         session = UUID()
         lastAttempt = now()
+        refreshSequence += 1
         lastAttemptAt = lastAttempt
         flightErrors = [:]
+        flightResults = [:]
         var work: [(GitHubTokenConnection, String)] = []
         for row in eligible {
             sources[row.id]?.authored.phase = .loading
@@ -317,6 +340,15 @@ final class PullRequestDashboard {
             }
             watchdog?.cancel()
             watchdog = nil
+            if self.session == session, !Task.isCancelled, let changeDetector {
+                let input = PullRequestChangeInput(sequence: refreshSequence, scopes: connections.compactMap(PullRequestChangeScope.init),
+                                                   results: flightResults, observedAt: now())
+                let output = await changeDetector.process(input, generation: connectionGeneration)
+                if self.session == session, !Task.isCancelled {
+                    changeDetectionStorageFailed = output.storageFailed
+                    if !output.events.isEmpty { onChanges?(output.events) }
+                }
+            }
             task = nil
             isRefreshing = false
             if pendingRefresh && !sleeping {
@@ -352,6 +384,9 @@ final class PullRequestDashboard {
             try Task.checkCancellation()
             let result = try await fetch(account, token, isReview)
             guard self.session == session, !Task.isCancelled else { return }
+            guard let connection = sources[id]?.connection else { return }
+            if isReview { flightResults[connection.storageAccount, default: .init()].requested = result }
+            else { flightResults[connection.storageAccount, default: .init()].authored = result }
             lastSuccessfulRefreshAt = now()
             let state = PullRequestSectionState(phase: .loaded, result: result, updatedAt: lastSuccessfulRefreshAt)
             if isReview { sources[id]?.reviews = state } else { sources[id]?.authored = state }

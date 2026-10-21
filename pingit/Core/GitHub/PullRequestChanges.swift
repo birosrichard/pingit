@@ -29,6 +29,7 @@ struct PullRequestChangeSnapshot: Codable, Equatable, Sendable {
     var identity: String
     var revision: UInt64 = 0
     var sources: [String: Source] = [:]
+    var rebasingRepositories: [String] = []
 
     struct Source: Codable, Equatable, Sendable {
         var authored: [String: PullRequest]?
@@ -82,6 +83,7 @@ struct PullRequestChangeScope: Equatable, Sendable {
 
 // Only results actually received in this flight enter detection; cached dashboard rows never do.
 struct PullRequestChangeInput: Sendable {
+    let sequence: UInt64
     let scopes: [PullRequestChangeScope]
     let results: [String: Sections]
     let observedAt: Date

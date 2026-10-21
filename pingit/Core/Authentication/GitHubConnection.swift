@@ -24,7 +24,8 @@ final class GitHubConnection {
         self.client = client
         self.credentials = store
         self.metadata = metadata ?? GitHubConnectionMetadata(defaults: credentials == nil ? .standard : nil)
-        dashboard = PullRequestDashboard(credentials: store, discovery: GitHubPullRequestDiscovery(client: client))
+        dashboard = PullRequestDashboard(credentials: store, discovery: GitHubPullRequestDiscovery(client: client),
+                                          changeDetector: credentials == nil ? PullRequestChangeDetector() : nil)
     }
 
     func restore() async {
