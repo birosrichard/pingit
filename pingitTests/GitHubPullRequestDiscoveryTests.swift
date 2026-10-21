@@ -26,6 +26,8 @@ struct GitHubPullRequestDiscoveryTests {
         #expect(request.query.contains("createdAt updatedAt"))
         #expect(request.query.contains("reviewDecision"))
         #expect(!request.query.contains("statusCheckRollup"))
+        #expect(request.query.contains("latestReviews(first: 50)"))
+        #expect(!request.query.contains("reviews(first:"))
         let pr = try #require(result.pullRequests.first)
         #expect(pr.id == "PR_1")
         #expect(pr.number == 1)
@@ -38,6 +40,7 @@ struct GitHubPullRequestDiscoveryTests {
         #expect(pr.createdAt == Date(timeIntervalSince1970: 1_792_486_800))
         #expect(pr.updatedAt == Date(timeIntervalSince1970: 1_792_573_200))
         #expect(pr.reviewStatus == .unknown && pr.checkStatus == nil && pr.reviewRequests == nil)
+        #expect(pr.latestReviews == GitHubLatestReviews(reviews: [], limitations: []))
         #expect(!result.isTruncated)
         #expect(result.coverageLimitations == [.tokenVisibility])
     }
@@ -54,6 +57,132 @@ struct GitHubPullRequestDiscoveryTests {
         default: .unknown
         }
         #expect(result.pullRequests.first?.reviewStatus == expected)
+    }
+
+    @Test(arguments: ["APPROVED", "CHANGES_REQUESTED", "COMMENTED", "DISMISSED", "PENDING", "FUTURE", nil] as [String?])
+    func normalizesIndividualStatesWithoutInferringOverallDecision(state: String?) async throws {
+        var value = node()
+        value["latestReviews"] = latest([review(state: state)])
+        let pr = try #require(try await authored(MockHTTP(body: payload([value]))).pullRequests.first)
+        let details = try #require(pr.latestReviews)
+        let expected: GitHubPullRequestReview.State = switch state {
+        case "APPROVED": .approved
+        case "CHANGES_REQUESTED": .changesRequested
+        case "COMMENTED": .commented
+        case "DISMISSED": .dismissed
+        case "PENDING": .pending
+        default: .unknown
+        }
+        #expect(details.reviews == [GitHubPullRequestReview(id: "REVIEW_1", authorLogin: "reviewer", state: expected)])
+        #expect(details.limitations == (expected == .unknown ? [.unknownState] : []))
+        #expect(pr.reviewStatus == .unknown)
+    }
+
+    @Test func multipleReviewersDoNotOverrideRepositoryDecision() async throws {
+        var value = node()
+        value["reviewDecision"] = "REVIEW_REQUIRED"
+        value["latestReviews"] = latest([
+            review("a", author: "alice", state: "APPROVED"),
+            review("b", author: "bob", state: "CHANGES_REQUESTED"),
+            review("c", author: "carol", state: "COMMENTED"),
+            review("d", author: "dave", state: "DISMISSED")
+        ])
+        let pr = try #require(try await authored(MockHTTP(body: payload([value]))).pullRequests.first)
+        #expect(pr.reviewStatus == .reviewRequired)
+        #expect(pr.latestReviews?.reviews.map(\.state) == [.approved, .changesRequested, .commented, .dismissed])
+        #expect(pr.latestReviews?.limitations == [])
+    }
+
+    @Test(arguments: ["APPROVED", "COMMENTED", "DISMISSED"])
+    func supersededSubmissionsAreExcludedByLatestReviewSelection(state: String) async throws {
+        var value = node()
+        // Only the server-selected latest review is consumed, even if historical fields are present.
+        value["reviews"] = latest([review("old", state: "CHANGES_REQUESTED"), review("new", state: state)])
+        value["latestReviews"] = latest([review("new", state: state)])
+        let script = Script([try payload([value])])
+        let pr = try #require(try await authored(script.http).pullRequests.first)
+        #expect(pr.latestReviews?.reviews.count == 1)
+        #expect(pr.latestReviews?.reviews.first?.id == "new")
+        #expect(pr.latestReviews?.reviews.first?.state != .changesRequested)
+        #expect(script.requests.count == 1)
+        #expect(script.requests.first?.query.contains("latestReviews(first: 50)") == true)
+        #expect(script.requests.first?.query.contains("reviews(first:") == false)
+    }
+
+    @Test(arguments: [nil, ""] as [String?])
+    func missingReviewIdentityIsRetainedAndMarkedIncomplete(login: String?) async throws {
+        var value = node()
+        value["latestReviews"] = latest([review("a", author: login), review("b", author: nil)])
+        let pr = try #require(try await authored(MockHTTP(body: payload([value]))).pullRequests.first)
+        #expect(pr.latestReviews?.reviews.count == 2)
+        #expect(pr.latestReviews?.reviews.allSatisfy { $0.authorLogin == nil } == true)
+        #expect(pr.latestReviews?.limitations == [.missingIdentity])
+    }
+
+    @Test(arguments: [false, true])
+    func unavailableReviewConnectionPreservesAuthoritativeDecision(explicitNull: Bool) async throws {
+        var value = node()
+        value["reviewDecision"] = "APPROVED"
+        value["latestReviews"] = explicitNull ? NSNull() : nil
+        let pr = try #require(try await authored(MockHTTP(body: payload([value]))).pullRequests.first)
+        #expect(pr.reviewStatus == .approved)
+        #expect(pr.latestReviews == GitHubLatestReviews(reviews: [], limitations: [.unavailable]))
+    }
+
+    @Test func incompleteReviewerPageRetainsAvailableReviews() async throws {
+        var value = node()
+        value["latestReviews"] = latest([review(), NSNull(), review("other", author: nil, state: "FUTURE")], more: true)
+        let result = try await authored(MockHTTP(body: payload([value])))
+        let pr = try #require(result.pullRequests.first)
+        #expect(!result.isTruncated)
+        #expect(pr.latestReviews?.reviews.count == 2)
+        #expect(pr.latestReviews?.limitations == [.reviewerLimit, .missingReview, .missingIdentity, .unknownState])
+    }
+
+    @Test func nullReviewerNodesAreUnavailableRatherThanEmpty() async throws {
+        var value = node()
+        value["latestReviews"] = ["nodes": NSNull(), "pageInfo": ["hasNextPage": false]]
+        let pr = try #require(try await authored(MockHTTP(body: payload([value]))).pullRequests.first)
+        #expect(pr.latestReviews?.limitations == [.unavailable])
+    }
+
+    @Test func reviewFieldsSurviveDiscoveryPaginationAndRequestSelection() async throws {
+        var first = node(1, author: "someone", reviewers: ["octocat"])
+        first["reviewDecision"] = "CHANGES_REQUESTED"
+        first["latestReviews"] = latest([review(state: "DISMISSED")])
+        var second = node(2, author: "someone", reviewers: ["octocat"])
+        second["reviewDecision"] = "APPROVED"
+        second["latestReviews"] = latest([review("second")])
+        for requested in [false, true] {
+            if !requested { first["author"] = ["login": "octocat"]; second["author"] = ["login": "octocat"] }
+            else { first["author"] = ["login": "someone"]; second["author"] = ["login": "someone"] }
+            let script = Script([try payload([first], more: true, cursor: "next"), try payload([second])])
+            let result = try await (requested ? reviews(script.http) : authored(script.http))
+            #expect(result.pullRequests.map(\.reviewStatus) == [.changesRequested, .approved])
+            #expect(result.pullRequests.compactMap { $0.latestReviews?.reviews.first?.state } == [.dismissed, .approved])
+            #expect(script.requests.count == 2)
+            #expect(script.requests.allSatisfy { $0.query.contains("reviewDecision") && $0.query.contains("latestReviews(first: 50)") })
+        }
+    }
+
+    @Test func inaccessibleReviewFieldFailsWholeDiscovery() async throws {
+        var value = node()
+        value["latestReviews"] = NSNull()
+        let success = try payload([value])
+        var object = try #require(JSONSerialization.jsonObject(with: Data(success.utf8)) as? [String: Any])
+        object["errors"] = [["type": "FORBIDDEN", "message": "Denied", "path": ["search", "nodes", 0, "latestReviews"] as [Any]]]
+        let denied = String(decoding: try JSONSerialization.data(withJSONObject: object), as: UTF8.self)
+        let script = Script([try payload([node()], more: true, cursor: "next"), denied])
+        await #expect(throws: GitHubAPIError.partialData) { try await authored(script.http) }
+        #expect(script.requests.count == 2)
+    }
+
+    private func review(_ id: String = "REVIEW_1", author: String? = "reviewer", state: String? = "APPROVED") -> [String: Any] {
+        ["id": id, "state": state as Any? ?? NSNull(), "author": author.map { ["login": $0] } as Any? ?? NSNull()]
+    }
+
+    private func latest(_ reviews: [Any], more: Bool = false) -> [String: Any] {
+        ["nodes": reviews, "pageInfo": ["hasNextPage": more, "endCursor": more ? "more" as Any : NSNull()]]
     }
 
     @Test func usesValidatedAccountRatherThanHardcodedLogin() async throws {
@@ -307,7 +436,8 @@ struct GitHubPullRequestDiscoveryTests {
             "title": "Pull request \(number)", "url": "https://github.com/acme/app/pull/\(number)",
             "repository": ["id": "R_1", "nameWithOwner": "acme/app", "url": "https://github.com/acme/app"],
             "author": author.map { ["login": $0] } as Any? ?? NSNull(), "state": state, "isDraft": draft,
-            "createdAt": "2026-10-20T09:00:00Z", "updatedAt": updated
+            "createdAt": "2026-10-20T09:00:00Z", "updatedAt": updated,
+            "latestReviews": latest([])
         ]
         if let reviewers {
             value["reviewRequests"] = [

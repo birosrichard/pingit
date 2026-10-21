@@ -40,6 +40,7 @@ struct GitHubPullRequestTests {
         let pr = try decoder.decode(GitHubPullRequest.self, from: Data(json.utf8))
         #expect(pr.authorLogin == nil)
         #expect(pr.reviewStatus == nil)
+        #expect(pr.latestReviews == nil)
         #expect(pr.checkStatus == nil)
         #expect(pr.reviewRequests == nil)
         let withEmptyRequests = json.dropLast() + #", "reviewRequests":[]}"#
@@ -51,6 +52,13 @@ struct GitHubPullRequestTests {
     func decodesReviewStatus(value: String) throws {
         let status = try JSONDecoder().decode(GitHubReviewStatus.self, from: Data("\"\(value)\"".utf8))
         #expect(status.rawValue == value)
+    }
+
+    @Test func reviewerDetailsRoundTrip() throws {
+        let details = GitHubLatestReviews(reviews: [
+            GitHubPullRequestReview(id: "review", authorLogin: nil, state: .dismissed)
+        ], limitations: [.missingIdentity, .reviewerLimit])
+        #expect(try JSONDecoder().decode(GitHubLatestReviews.self, from: JSONEncoder().encode(details)) == details)
     }
 
     @Test(arguments: ["pending", "success", "failure"])

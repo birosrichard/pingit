@@ -31,6 +31,7 @@ struct GitHubPullRequestSearchResponse: Decodable, Sendable {
         let createdAt: String
         let updatedAt: String
         let reviewDecision: String?
+        let latestReviews: LatestReviews?
         let reviewRequests: ReviewRequests?
 
         enum State: String, Decodable, Sendable { case open = "OPEN", closed = "CLOSED", merged = "MERGED" }
@@ -49,7 +50,9 @@ struct GitHubPullRequestSearchResponse: Decodable, Sendable {
                 repository: GitHubRepository(id: repository.id, nameWithOwner: repository.nameWithOwner, url: repository.url),
                 authorLogin: author?.login, isDraft: isDraft,
                 createdAt: try Self.date(createdAt), updatedAt: try Self.date(updatedAt),
-                reviewStatus: overallReviewStatus, checkStatus: nil,
+                reviewStatus: overallReviewStatus,
+                latestReviews: latestReviews?.domain() ?? GitHubLatestReviews(reviews: [], limitations: [.unavailable]),
+                checkStatus: nil,
                 reviewRequests: reviewRequests?.pageInfo.hasNextPage == true ? nil : requests
             )
         }
@@ -79,6 +82,44 @@ struct GitHubPullRequestSearchResponse: Decodable, Sendable {
         let id: String
         let nameWithOwner: String
         let url: URL
+    }
+
+    struct LatestReviews: Decodable, Sendable {
+        let nodes: [Review?]?
+        let pageInfo: PageInfo
+
+        func domain() -> GitHubLatestReviews {
+            var limitations: Set<GitHubLatestReviews.Limitation> = []
+            if pageInfo.hasNextPage { limitations.insert(.reviewerLimit) }
+            guard let nodes else {
+                limitations.insert(.unavailable)
+                return GitHubLatestReviews(reviews: [], limitations: limitations)
+            }
+            // GitHub selects the latest non-pending review per user, excluding superseded submissions.
+            let reviews = nodes.compactMap { node -> GitHubPullRequestReview? in
+                guard let node else { limitations.insert(.missingReview); return nil }
+                let login = node.author?.login
+                let identity = login?.isEmpty == false ? login : nil
+                if identity == nil { limitations.insert(.missingIdentity) }
+                let state: GitHubPullRequestReview.State = switch node.state {
+                case "APPROVED": .approved
+                case "CHANGES_REQUESTED": .changesRequested
+                case "COMMENTED": .commented
+                case "DISMISSED": .dismissed
+                case "PENDING": .pending
+                default: .unknown
+                }
+                if state == .unknown { limitations.insert(.unknownState) }
+                return GitHubPullRequestReview(id: node.id, authorLogin: identity, state: state)
+            }
+            return GitHubLatestReviews(reviews: reviews, limitations: limitations)
+        }
+    }
+
+    struct Review: Decodable, Sendable {
+        let id: String
+        let author: Actor?
+        let state: String?
     }
 
     struct ReviewRequests: Decodable, Sendable {
@@ -129,6 +170,10 @@ struct GitHubPullRequestSearchResponse: Decodable, Sendable {
           ... on PullRequest {
             id number title url state isDraft createdAt updatedAt
             reviewDecision
+            latestReviews(first: 50) {
+              pageInfo { hasNextPage endCursor }
+              nodes { id state author { login } }
+            }
             author { login }
             repository { id nameWithOwner url }
             reviewRequests(first: 100) @include(if: $includeReviewRequests) {

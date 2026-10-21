@@ -20,6 +20,7 @@ struct GitHubPullRequest: Codable, Equatable, Sendable, Identifiable {
     let updatedAt: Date
     // nil means not loaded/available, rather than no reviews or successful CI.
     let reviewStatus: GitHubReviewStatus?
+    let latestReviews: GitHubLatestReviews?
     let checkStatus: GitHubCheckStatus?
     let reviewRequests: [GitHubReviewRequest]?
 }
@@ -40,4 +41,33 @@ enum GitHubCheckStatus: String, Codable, Sendable {
 enum GitHubReviewRequest: Codable, Equatable, Sendable {
     case user(login: String)
     case team(organizationLogin: String, slug: String)
+}
+
+// Supporting review information, independent of GitHub's repository review decision.
+struct GitHubLatestReviews: Codable, Equatable, Sendable {
+    let reviews: [GitHubPullRequestReview]
+    let limitations: Set<Limitation>
+
+    enum Limitation: String, Codable, Sendable {
+        case unavailable
+        case reviewerLimit
+        case missingReview
+        case missingIdentity
+        case unknownState
+    }
+}
+
+struct GitHubPullRequestReview: Codable, Equatable, Sendable, Identifiable {
+    let id: String
+    let authorLogin: String?
+    let state: State
+
+    enum State: String, Codable, Sendable {
+        case approved
+        case changesRequested
+        case commented
+        case dismissed
+        case pending
+        case unknown
+    }
 }
