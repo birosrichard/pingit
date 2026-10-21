@@ -7,10 +7,10 @@ and no external dependencies.
 - `pingit/App/` owns the SwiftUI lifecycle, scenes, and shared connection lifetime.
 - `pingit/Core/Authentication/` owns the shared API client, Keychain store, and connection state.
 - `pingit/Core/GitHub/` holds PR domain values, independent of SwiftUI and transport envelopes.
-- `pingit/Features/MenuBar/` owns the popover and connection status.
+- `pingit/Features/MenuBar/` owns the native PR dashboard, popover, and connection status.
 - `pingit/Features/Settings/` owns native connection setup and the shared account view.
 - `pingit/Resources/` holds Info.plist and sandbox entitlements.
-- `pingitTests/` contains mocked authentication and credential lifecycle tests.
+- `pingitTests/` contains mocked authentication, discovery, review, and dashboard lifecycle tests.
 - `Configuration/App.xcconfig` centralizes bundle identity, versions, and build policy.
 
 ## Scenes and connection lifetime
@@ -33,8 +33,8 @@ The shared `GitHubConnectionControls` view holds only an unsaved token draft.
 Settings embeds it in its connection section; the menu bar’s **Connect GitHub**
 CTA opens the same controls in a scrollable panel with a Back action. Submission
 clears the draft before the asynchronous attempt; successful connection and view disappearance clear it too.
-The connected view never reads a token. The menu bar shows connection status,
-Settings, disabled Refresh, and Quit. Opening Settings activates the agent app
+The connected view never reads a token. The menu bar shows the shared dashboard,
+Settings, Refresh (⌘R), and Quit. Opening Settings activates the agent app
 through AppKit. These UI actions remain on the main actor.
 
 ## API and credential boundaries
@@ -51,7 +51,7 @@ The successful `/user` response proves identity, not repository/organization acc
 session, header validation, and sanitized transport handling as account validation.
 Callers supply the existing Keychain token per request; the client retains no token
 and does not own credential storage or invalidation. Variables are `Encodable & Sendable` and
-response data is `Decodable & Sendable`. No app scene calls discovery yet.
+response data is `Decodable & Sendable`. The dashboard state layer invokes discovery on opening/refresh.
 
 GraphQL errors are inspected before typed data decoding. Responses containing both
 non-null data and errors throw `partialData`; partial results are deliberately not
@@ -80,7 +80,7 @@ It accepts the validated account and Keychain token per call, verifies `viewer.l
 and queries authored open PRs (including drafts) or direct pending review requests
 (excluding drafts/own PRs). Transport DTOs live in `GitHubPullRequestSearch.swift`.
 Result values carry token visibility/team coverage limits independently of pagination
-truncation. The app lifecycle, authentication state and views are unchanged. See
+truncation. `PullRequestDashboard` reuses this service for both sections. See
 [discovery](discovery.md) for query semantics, request bounds, permissions and limitations.
 
 `KeychainCredentialStore` uses the Security SecItem APIs against the macOS Data
@@ -104,22 +104,37 @@ A test-only URLSession can be supplied to the concrete API client. The concrete
 Keychain store accepts four narrow Security operation closures, so tests can check
 actual query attributes and lifecycle without touching the user's Keychain.
 Connection tests compose these concrete types. No networking protocols, generic
-repositories, containers, or dependency frameworks are introduced.
+repositories, containers, or dependency frameworks are introduced. Dashboard tests inject narrow
+credential, clock, and async discovery closures, including controlled late completions.
 
-The unhosted test bundle compiles the same authentication and domain source files rather
+The unhosted test bundle compiles the same authentication, domain, and dashboard state source files rather
 than launching `PingitApp`; tests cannot trigger startup credential restoration or
 real network requests. Provisioned Keychain access and visual interactions require
 a manual pass with a signed app. Xcode test action entitlement injection is checked
 separately from ordinary Debug/Release product entitlements. A separate launch smoke
 check catches macOS launch-time rejection; static signature checks alone are insufficient.
 
+## Dashboard state and refresh
+
+`GitHubConnection` owns a main-actor observable `PullRequestDashboard`, with the same
+Keychain store and discovery client. Successful account validation resets its session;
+successful disconnect cancels tasks and clears account-specific results immediately.
+The popover triggers loading on appearance/account change, using a 60-second freshness
+window since the last attempt. Explicit Refresh bypasses it; duplicate requests are
+ignored. An account/refresh generation and cancellation checks reject late responses.
+
+Authored and direct-review discovery run concurrently and publish separate results,
+loading phases, sanitized errors, last-success dates, and coverage. Successful data
+remains visible during refresh/failure. Token access and networking stay outside views;
+the credential is read once per refresh, never published to observation. Nothing
+persists PR data. Native Links revalidate API URLs before becoming activatable;
+display metadata never constructs a URL. See [dashboard](dashboard.md) for
+lifecycle, accessibility, tests, live validation evidence, and remaining manual checks.
+
 ## Future boundaries
 
-Phases 1, 2, 3A, 3B and 3C are implemented. A future discovery state layer will connect
-explicit refresh to authenticated data access. PR/review data belongs outside views, using
-asynchronous calls with cancellation, pagination, and rate-limit handling. Future
-repository permissions must be documented separately; successful account validation
-must never imply that those permissions exist. Polling and notifications belong
+Phases 1, 2, 3A, 3B, 3C and 3D are implemented. Successful account validation
+must never imply complete repository access. Polling and notifications belong
 outside view lifetimes and must stop on disconnect/quit. Preferences, repository
 selection, multiple accounts, OAuth, and packaging are out of this phase.
 

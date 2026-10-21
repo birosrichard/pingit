@@ -3,20 +3,20 @@
 A lightweight, native macOS menu bar app for GitHub activity. The goal is to show
 pull requests, reviews, comments, and CI updates that need your attention.
 
-**Current status: Phase 3C — Pull Request Review Status.** Connect one GitHub.com account
-with a personal access token, verify its identity, see its username/avatar, and
-disconnect. The app restores and revalidates saved credentials at startup. Settings
-and the menu bar share connection state. The data layer can fetch authored open PRs
-and active direct review requests with bounded pagination. No UI calls discovery yet;
-Refresh remains disabled. Discovered PRs expose GitHub's overall review decision
-and bounded latest reviewer states with explicit coverage limitations. CI aggregation,
-polling, and notifications are deferred. See [review semantics](docs/reviews.md).
-See [discovery permissions, bounds, and team limitations](docs/discovery.md).
+**Current status: Phase 3D — Live Pull Request Dashboard.** Connect one GitHub.com
+account with a personal access token stored in macOS Keychain. Open the menu bar
+to see active direct review requests and authored open PRs, review decisions,
+drafts, counts, timestamps, and repository visibility limits. Open PRs on GitHub,
+or refresh with the button/⌘R. Results stay in memory, refresh after a 60-second
+freshness window on opening, and clear on disconnect. CI, polling, and notifications
+remain deferred. See [dashboard behavior and validation](docs/dashboard.md),
+[review semantics](docs/reviews.md), and
+[discovery permissions and limitations](docs/discovery.md).
 
 ## Requirements
 
 - macOS 14 or later; Apple Silicon and Intel
-- Xcode 16 or later with Swift 6; validated with Xcode 26.3 / Swift 6.2.4
+- Xcode 16 or later with Swift 6; Phase 3D validated with Xcode 27.1 / Swift 6.4
 - A valid Apple Development signing identity and provisioning profile for real
   Keychain access (choose your development team in Xcode; no team is committed)
 
@@ -81,9 +81,11 @@ hardened runtime for ad hoc signing. Distribution/notarization is future work.
 GitHub documents that [`GET /user`](https://docs.github.com/en/rest/users/users#get-the-authenticated-user)
 requires no additional fine-grained permissions. Successful validation establishes
 account identity; it does **not** prove access to private repositories or
-organization resources. Future PR/review features may require additional read
-permissions on selected repositories and organization approval. No such access
-is requested or tested in Phase 2.
+organization resources. For private PRs, select the required repositories and grant
+**Pull requests: Read-only** (with accompanying Metadata read access). Organization
+resources also require the correct resource owner, permitted token policy, and any
+required approval. Existing saved tokens are not upgraded. See
+[discovery permissions](docs/discovery.md) for fine-grained token visibility limits.
 
 At startup, an invalid/expired saved token is removed. Offline, rate-limit, and
 server failures retain the credential; **Retry saved connection** revalidates it
@@ -169,7 +171,7 @@ Manual checks, using a development-team-signed build and a disposable token:
 - Confirm disconnected status, disabled empty Connect, secure entry, setup link,
   and version/build; check light/dark appearance and keyboard/VoiceOver access.
 - Connect; confirm progress, disabled duplicate attempts, cleared input, username
-  and avatar, and matching menu bar state. Refresh must remain disabled.
+  and avatar in Settings, and matching menu bar state. Refresh enables when connected.
 - Quit/relaunch and verify saved-token restoration without re-entering the token.
 - Relaunch offline; check the retry/disconnect actions and recovery when online.
 - Revoke/expire the token in GitHub, then relaunch; verify its local removal and
@@ -179,6 +181,12 @@ Manual checks, using a development-team-signed build and a disposable token:
   failed deletion must not claim a successful disconnect.
 - Close Settings while connecting; ensure completion and reopening remain coherent.
 - Quit cleanly; also run the Release app on an Intel Mac before distribution.
+
+For the dashboard's live comparisons, refresh/cancellation, links, and accessibility
+checks, follow the [Phase 3D acceptance checklist](docs/dashboard.md#remaining-manual-acceptance).
+All 104 mocked tests and the development-signed arm64 Debug build pass; a supplied
+screenshot confirms live authored data and an empty direct-request result, while
+complete repository visibility and nonempty direct requests still need verification.
 
 After rebuilding a running app, quit its old instance and relaunch to load the new
 executable. See [architecture](docs/architecture.md) and the

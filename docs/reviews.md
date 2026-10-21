@@ -78,3 +78,12 @@ not exercise the provisioned app's Keychain entitlement. Live app-token visibili
 private organization access, and permission behavior were not validated here and
 still need a signed-app acceptance pass.
 No credential was extracted into a shell or a file for validation.
+
+## Dashboard integration (Phase 3D)
+
+The authored section displays the authoritative decision as Approved, Changes
+requested, Review required, or Review status unknown, alongside a separate draft
+indicator. No decision is inferred from individual reviews. Approval is never
+labeled merge-ready. Latest-review details remain available in the domain but
+are not expanded in the compact dashboard. See [dashboard](dashboard.md) for current
+validation and the remaining manual acceptance checklist.

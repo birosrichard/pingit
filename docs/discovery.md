@@ -1,7 +1,8 @@
-# Pull request discovery (Phases 3B–3C)
+# Pull request discovery (Phases 3B–3D)
 
-`GitHubPullRequestDiscovery` fetches data on explicit invocation. No app scene calls
-it yet, and Refresh remains disabled. Supply the `GitHubAccount` already validated
+`GitHubPullRequestDiscovery` fetches data on explicit invocation. The Phase 3D
+dashboard calls it on popover opening or manual Refresh, using a 60-second freshness
+window without timers. Supply the `GitHubAccount` already validated
 by `GitHubConnection` and the token loaded from the existing Keychain store. The
 service does not retain credentials, change authentication, or invalidate tokens.
 The `viewer.login` in every page must match the supplied account; a mismatch fails
@@ -125,8 +126,8 @@ validation, null authors, fractional dates, draft
 rules, direct/fulfilled/team requests, empty visibility-limited results, cursor and
 nested limits, deduplication/order, permission/API errors and cancellation on page two.
 
-Phase 3D is recommended to add a cancellable, user-initiated discovery state layer
-that loads the existing credential and exposes authored/review lists, errors,
-truncation and coverage. Phase 3D and UI wiring require separate instructions. Team
-discovery needs its own tests and access/visibility policy. CI aggregation, activity
+Phase 3D adds the cancellable dashboard state layer and native menu bar UI, exposing
+both lists, errors, timestamps, truncation, and coverage. See [dashboard](dashboard.md)
+for current validation and remaining live acceptance. Team discovery still needs its
+own scope, tests, and access/visibility policy. CI aggregation, activity
 tracking, polling and notifications stay deferred.

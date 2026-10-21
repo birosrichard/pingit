@@ -1,6 +1,6 @@
 # Development roadmap
 
-Phases 1, 2, 3A, 3B and 3C are implemented. Phase 3D and Phases 4–8 remain planned.
+Phases 1, 2, 3A, 3B, 3C and 3D are implemented. Phases 4–8 remain planned.
 Keep each phase independently buildable and validate before moving on.
 
 ## 1. Project foundation
@@ -52,11 +52,16 @@ Keep each phase independently buildable and validate before moving on.
 - Mocked tests and arm64 Debug build pass; signed Keychain/live API remain unverified.
 - See [review semantics and limitations](reviews.md). No CI, UI, polling or notifications.
 
-### 3D. Discovery state and explicit refresh — recommended next scope
+### 3D. Live pull request dashboard — implemented
 
-- A cancellable state layer using the existing account/Keychain credential.
-- Preserve authored/review results, loading/error state, and coverage/truncation metadata.
-- Plan UI integration separately; do not add polling, notifications or aggregation implicitly.
+- Native scrolling authored/direct-review lists, counts, drafts, overall review decisions, and validated browser links.
+- Separate observable section states, cached results, timestamps, and coverage/truncation notes.
+- On-open loading with 60-second freshness, explicit Refresh, duplicate prevention, and no timers.
+- Successful disconnect cancels and clears; session guards reject stale responses after reconnect.
+- All 104 mocked tests and signed arm64 Debug build pass. User-supplied live screenshot
+  confirms authored results and empty direct requests; full visibility/nonempty live direct
+  requests and UI interaction/accessibility still need the acceptance checklist.
+- See [dashboard behavior and validation](dashboard.md). No CI, polling, notifications, or GitHub writes.
 
 ## 4. Reviews and relevant activity
 
