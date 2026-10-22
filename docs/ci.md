@@ -13,8 +13,9 @@ One GitHub-hosted `macos-15` job selects **Xcode 26.3, build 17C529**, explicitl
 is listed in GitHub's [macOS 15 arm64 runner image manifest](https://github.com/actions/runner-images/blob/main/images/macos/macos-15-arm64-Readme.md)
 (checked 2026-10-21). The OS label is pinned rather than using `macos-latest`;
 GitHub still updates the underlying image. The script prints installed Xcodes,
-checks the selected executable and exact Xcode version/build, and fails clearly
-if it is missing or different. It also records macOS, architecture, Swift compiler
+checks the selected executable and, in GitHub Actions, exact Xcode version/build.
+It fails clearly if the required toolchain is missing or different, and records
+macOS, architecture, Swift compiler
 location/version and installed SDKs. Toolchain upgrades must update the workflow,
 script and this document together after checking the manifest and a macOS run.
 
@@ -97,16 +98,24 @@ toolchain mismatches fail CI. There are no retries or ignored test failures.
 
 ## Reproduce locally
 
-On macOS, install the full Xcode 26.3 application, complete its first-launch setup,
-then run from the repository checkout:
+On macOS, install full Xcode, complete its first-launch setup, then run from the
+repository checkout using your selected Xcode (including Xcode 27.1):
 
 ```sh
-export DEVELOPER_DIR=/Applications/Xcode_26.3.app/Contents/Developer
 bash scripts/ci-macos.sh
 ```
 
-If installed under another name, set `DEVELOPER_DIR` to that app's
-`Contents/Developer`; the exact version/build is still checked. Each invocation
+The script uses `DEVELOPER_DIR` when set, otherwise `xcode-select -p`. If your
+selection points to Command Line Tools or a different Xcode, select the app for
+this shell:
+
+```sh
+export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer
+bash scripts/ci-macos.sh
+```
+
+Local runs report the version without enforcing the hosted CI pin. To reproduce
+the hosted toolchain exactly, use Xcode 26.3 (17C529). Each invocation
 creates a fresh diagnostics directory and reuses ignored
 `build/ci/DerivedData`. The script contains the exact `xcodebuild` command used
 in Actions. No developer account or signing identity is needed for this check.

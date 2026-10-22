@@ -6,27 +6,26 @@ cd "$(dirname "$0")/.."
 mkdir -p build/ci
 run_dir=$(mktemp -d "$PWD/build/ci/run.XXXXXX")
 
-export DEVELOPER_DIR=${DEVELOPER_DIR:-/Applications/Xcode_26.3.app/Contents/Developer}
-
 main() {
     if [[ $(uname -s) != Darwin ]]; then
-        echo 'error: macOS and a full Xcode 26.3 installation are required.' >&2
+        echo 'error: macOS and a full Xcode installation are required.' >&2
         return 1
     fi
 
+    export DEVELOPER_DIR=${DEVELOPER_DIR:-$(xcode-select -p)}
     echo "Diagnostics: $run_dir"
     echo "Selected developer directory: $DEVELOPER_DIR"
     echo 'Installed Xcode applications:'
     find /Applications -maxdepth 1 -name 'Xcode*.app' -print
     if [[ ! -x "$DEVELOPER_DIR/usr/bin/xcodebuild" ]]; then
-        echo "error: Xcode 26.3 is unavailable at $DEVELOPER_DIR; update the CI toolchain pin against the runner image manifest." >&2
+        echo "error: Full Xcode is unavailable at $DEVELOPER_DIR; set DEVELOPER_DIR to your Xcode app's Contents/Developer directory." >&2
         return 1
     fi
 
     local xcode_version
     xcode_version=$(xcodebuild -version)
     echo "$xcode_version"
-    if [[ "$xcode_version" != $'Xcode 26.3\nBuild version 17C529' ]]; then
+    if [[ "${GITHUB_ACTIONS:-false}" == true && "$xcode_version" != $'Xcode 26.3\nBuild version 17C529' ]]; then
         echo 'error: Expected Xcode 26.3 (17C529); refusing to use a different toolchain.' >&2
         return 1
     fi

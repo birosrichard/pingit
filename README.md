@@ -54,7 +54,7 @@ Selecting a team alone does not provide Keychain access.
 If your shell uses Command Line Tools, select Xcode for these commands:
 
 ```sh
-export DEVELOPER_DIR=/Applications/Xcode-26.3.0.app/Contents/Developer
+export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer
 ```
 
 To build for UI inspection without selecting an Apple Developer team:
