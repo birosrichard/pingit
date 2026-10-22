@@ -32,6 +32,8 @@ struct SettingsView: View {
                     .font(.caption).foregroundStyle(.secondary)
             }
 
+            NotificationSettingsSection()
+
             Section("About pingit") {
                 LabeledContent("Version", value: version)
                 LabeledContent("Build", value: build)
@@ -193,5 +195,46 @@ struct GitHubConnectionControls: View {
             await connection.connect(token: submittedToken, resourceOwner: owner, replacing: replacing)
             if connection.errorMessage == nil { isAdding = false; replacing = nil }
         }
+    }
+}
+
+struct NotificationSettingsSection: View {
+    @Environment(NotificationCoordinator.self) private var notifications
+
+    var body: some View {
+        @Bindable var preferences = notifications.preferences
+        Section("Notifications") {
+            Toggle("Enable notifications", isOn: $preferences.enabled)
+            Text("New events only. Private repository names and PR titles may appear in banners and Notification Center. Control previews in macOS System Settings.")
+                .font(.caption).foregroundStyle(.secondary)
+            LabeledContent("Permission", value: notifications.permission.label)
+            if notifications.permission == .notDetermined {
+                Button("Request notification permission") {
+                    Task { await notifications.requestPermission() }
+                }
+                .disabled(notifications.isRequestingPermission)
+            } else {
+                Button("Refresh permission status") {
+                    Task { await notifications.refreshAuthorization() }
+                }
+            }
+            Group {
+                Toggle("Review requested", isOn: $preferences.reviewRequested)
+                Toggle("Review request removed", isOn: $preferences.reviewRequestRemoved)
+                Toggle("Pull request approved", isOn: $preferences.approved)
+                Toggle("Changes requested", isOn: $preferences.changesRequested)
+                Toggle("Ready for review", isOn: $preferences.readyForReview)
+                Toggle("Play a sound", isOn: $preferences.sound)
+            }
+            .disabled(!preferences.enabled)
+            #if DEBUG
+            Button("Send test notification") { notifications.sendDebugNotification() }
+                .disabled(!preferences.enabled || !notifications.permission.allowsDelivery || notifications.isDelivering)
+            #endif
+            if let error = notifications.errorMessage {
+                Text(error).font(.caption).foregroundStyle(.red)
+            }
+        }
+        .task { await notifications.refreshAuthorization() }
     }
 }
