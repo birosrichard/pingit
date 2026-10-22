@@ -199,8 +199,12 @@ complete concurrency and warnings as errors. The initial run found a recursive
 nested Swift Testing `#require` macro in the new migration fixture; it was corrected.
 The second run compiled the app and tests and executed 308 tests; one new privacy
 assertion incorrectly matched the existing `reviewers` JSON key instead of an actor
-value. The assertion was corrected to check the quoted actor value. Final CI results
-will be recorded before handoff. No CI infrastructure was changed.
+value. The assertion was corrected to check the quoted actor value. The final implementation run passed **311 tests across 30 suites** and built the
+app successfully at `ef13e3b`:
+[macOS CI run 39728988515](https://github.com/birosrichard/pingit/actions/runs/39728988515).
+The only framework-tool notices were the existing AppIntents metadata-extraction
+warnings, not Swift compiler warnings. The following documentation-only commit
+records that result; current-head CI is also visible in the Draft PR checks. No CI infrastructure was changed.
 Native notification delivery, production signing/Keychain entitlements, real PAT
 coverage and live runtime behavior require manual acceptance on macOS.
 
