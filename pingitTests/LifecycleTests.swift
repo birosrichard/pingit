@@ -228,6 +228,14 @@ struct LifecycleDetectionTests {
         #expect(try f.memory.store.load()?.lifecycles?.isEmpty == true)
     }
 
+    @Test func rediscoveryAfterClosedRetentionIsAQuietBaseline() async {
+        let f = LifecycleFixture(), d = PullRequestChangeDetector(store: f.memory.store)
+        _ = await d.process(f.input(1), generation: 1)
+        _ = await d.process(f.input(2, state: .closed), generation: 1)
+        let sequence: UInt64 = 10_000 // beyond the seven-day retention
+        #expect(await d.process(f.input(sequence), generation: 1).events.isEmpty)
+    }
+
     @Test func globalStorageAndBatchBounds() async throws {
         let f = LifecycleFixture(), d = PullRequestChangeDetector(store: f.memory.store)
         let result = GitHubPullRequestDiscoveryResult(pullRequests: (0..<150).map { f.pr("PR_\($0)") },

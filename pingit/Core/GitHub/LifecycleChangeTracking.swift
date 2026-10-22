@@ -76,7 +76,9 @@ enum LifecycleChangeTracking {
                       }),
                       let validURL = GitHubNotificationURL.validate(observation.url.absoluteString), validURL.fragment == nil,
                       observation.url.path == "/\(observation.repository.nameWithOwner)/pull/\(value.number)" else { continue }
-                let prior = old.lifecycles?[id]
+                // A retained record may expire and be rediscovered in this same sync.
+                // Its new pending candidate must not compare against the expired state.
+                let prior = value.state == nil ? nil : old.lifecycles?[id]
                 var kind: PullRequestChangeEvent.Kind?
                 var transitionAt: Date?
                 if prior?.state == .open && observation.state == .merged {
