@@ -10,9 +10,10 @@ struct PingitApp: App {
             MenuBarView()
                 .environment(lifecycle.connection)
         } label: {
-            Image("MenuBarIcon")
+            let indicator = MenuBarIndicatorPresentation(isConnected: lifecycle.connection.account != nil)
+            Image(indicator.assetName)
                 .renderingMode(.template)
-                .accessibilityLabel(lifecycle.connection.account == nil ? "pingit — Not connected" : "pingit — Connected")
+                .accessibilityLabel(indicator.accessibilityLabel)
         }
         .menuBarExtraStyle(.window)
 

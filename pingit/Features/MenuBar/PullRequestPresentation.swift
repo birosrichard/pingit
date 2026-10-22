@@ -116,3 +116,10 @@ extension PullRequestInbox {
         }
     }
 }
+
+// The menu bar has no numeric badge: it reports connection presence only.
+struct MenuBarIndicatorPresentation: Equatable {
+    let isConnected: Bool
+    var assetName: String { "MenuBarIcon" }
+    var accessibilityLabel: String { isConnected ? "pingit — Connected" : "pingit — Not connected" }
+}

@@ -787,3 +787,93 @@ extension DiscoveryCoveragePresentationTests {
         #expect(display.details.contains("Organization: GitHub returned incomplete data"))
     }
 }
+
+extension MultiTokenDashboardTests {
+    @Test func attentionBecomesUnknownWhenOneTokenFailsAndMissingPRRemainsDiscoverable() async {
+        let rows = scopes()
+        let service = ControlledDiscovery()
+        var missing = false
+        let dashboard = PullRequestDashboard(scopedCredential: { reference in
+            missing && reference == rows[0].storageAccount ? nil : reference
+        }, fetch: { account, token, review in
+            try await service.fetch(account: account, token: token, review: review)
+        })
+        let action = pr("action", decision: .changesRequested, author: account.login)
+        dashboard.setConnections(rows, refresh: true)
+        await service.waitForCalls(4)
+        await service.resolveAll(result: result([action]), token: rows[0].storageAccount)
+        await service.resolveAll(result: empty, token: rows[1].storageAccount)
+        await finish(dashboard)
+        #expect(dashboard.authored.attention(for: action, viewerLogin: account.login) == .needsAttention(.changesRequested))
+        missing = true
+        dashboard.refresh()
+        await service.waitForCalls(6)
+        await service.resolveAll(result: empty)
+        await finish(dashboard)
+        #expect(dashboard.authored.result?.pullRequests == [action])
+        #expect(dashboard.authored.attention(for: action, viewerLogin: account.login) == .unknown(.previous))
+        #expect(PullRequestInbox.authored.countText(in: dashboard.authored) == "1")
+        missing = false
+        dashboard.refresh()
+        await service.waitForCalls(10)
+        await service.resolveAll(result: empty)
+        await finish(dashboard)
+        #expect(dashboard.authored.result?.pullRequests.isEmpty == true)
+    }
+
+    @Test func unvalidatedConnectionWithholdsActionEvenWhenAnotherTokenSucceeds() async {
+        var rows = scopes()
+        rows[1].account = nil
+        let service = ControlledDiscovery()
+        let dashboard = makeDashboard(service)
+        let action = pr("action", decision: .changesRequested, author: account.login)
+        dashboard.setConnections(rows, refresh: true)
+        await service.waitForCalls(2)
+        await service.resolveAll(result: result([action]))
+        await finish(dashboard)
+        #expect(dashboard.sources[rows[1].id]?.authored.phase == .failed)
+        #expect(dashboard.authored.attention(for: action, viewerLogin: account.login) == .unknown(.previous))
+    }
+
+    @Test func cancelledRefreshDoesNotMakeCachedAttentionCurrentAgain() async {
+        let service = ControlledDiscovery()
+        let dashboard = makeDashboard(service)
+        let action = pr("action", decision: .changesRequested, author: account.login)
+        dashboard.setConnections([scopes()[0]], refresh: true)
+        await service.waitForCalls(2)
+        await service.resolveAll(result: result([action]))
+        await finish(dashboard)
+        #expect(dashboard.authored.attention(for: action, viewerLogin: account.login).reason == .changesRequested)
+        dashboard.refresh()
+        await service.waitForCalls(4)
+        dashboard.shutdown()
+        await service.resolveAll(result: empty)
+        await service.waitForFinishes(4)
+        await finish(dashboard)
+        #expect(dashboard.authored.result?.pullRequests == [action])
+        #expect(dashboard.authored.attention(for: action, viewerLogin: account.login) == .unknown(.previous))
+    }
+
+    @Test func truncatedRefreshRetainsMissingPRAndCompleteRefreshReconcilesIt() async {
+        let service = ControlledDiscovery()
+        let dashboard = makeDashboard(service)
+        let action = pr("action", decision: .changesRequested, author: account.login)
+        dashboard.setConnections([scopes()[0]], refresh: true)
+        await service.waitForCalls(2)
+        await service.resolveAll(result: result([action]))
+        await finish(dashboard)
+        dashboard.refresh()
+        await service.waitForCalls(4)
+        await service.resolveAll(result: result([], reasons: [.pageLimit]))
+        await finish(dashboard)
+        #expect(dashboard.authored.result?.pullRequests == [action])
+        #expect(dashboard.authored.previousPullRequestIDs == [action.id])
+        #expect(dashboard.authored.attention(for: action, viewerLogin: account.login) == .unknown(.previous))
+        dashboard.refresh()
+        await service.waitForCalls(6)
+        await service.resolveAll(result: empty)
+        await finish(dashboard)
+        #expect(dashboard.authored.result?.pullRequests.isEmpty == true)
+        #expect(dashboard.authored.previousPullRequestIDs.isEmpty)
+    }
+}
