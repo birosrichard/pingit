@@ -3,7 +3,12 @@
 A lightweight, native macOS menu bar app for GitHub activity. The goal is to show
 pull requests, reviews, comments, and CI updates that need your attention.
 
-**Current status: Phase 6B — Pull Request Lifecycle Tracking (stacked on Phase 6A).**
+**Current status: Phase 7A — Attention & Review Prioritization.**
+Verified direct review requests and authored changes-requested decisions receive
+subtle attention labels and appear first within their existing tabs. Drafts,
+waiting, unknown and previous data remain distinct. The menu bar still reports
+connection presence only; tab counts count displayed PRs, not actions. See
+[attention precedence, failure behavior and manual acceptance](docs/phase-7a.md).
 Connect one GitHub.com identity with multiple tokens stored independently in macOS
 Keychain. Review / My PRs / Drafts show clearer native PR rows, repository/owner
 identity, independent review context and compact file/addition/deletion totals.

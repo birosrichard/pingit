@@ -48,7 +48,8 @@ struct PullRequestAttentionTests {
 
     @Test func missingAndUnknownDecisionNeverUseIndividualReviewsToInferAction() {
         let changes = GitHubLatestReviews(reviews: [.init(id: "r", authorLogin: "reviewer", state: .changesRequested)], limitations: [])
-        for status: GitHubReviewStatus? in [nil, .unknown] {
+        let unavailable: [GitHubReviewStatus?] = [nil, .unknown]
+        for status in unavailable {
             #expect(classify(pr(status: status, reviews: changes)) == .unknown(.missingMetadata))
         }
         #expect(classify(pr(author: "other", requests: nil)) == .unknown(.missingMetadata))
