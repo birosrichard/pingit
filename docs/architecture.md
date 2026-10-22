@@ -239,3 +239,15 @@ IDs remain in memory; notification content is handed to macOS and may be retaine
 Notification Center. The Phase 5B snapshot and credential boundaries are unchanged.
 See [behavior, privacy, tests and macOS acceptance](phase-5c.md). No macOS compilation,
 test execution, signing or notification delivery was performed for Phase 5C on Linux.
+
+
+## Phase 6A conversation tracking
+
+The same refresh workers optionally probe up to 40 eligible PRs per token in batches
+of five, fetching complete bounded comment/thread details only when the fingerprint
+changes. Failures leave PR discovery usable and break comment comparability. The
+existing detector commits comment IDs and coverage metadata in its version-2 snapshot
+before calling the same notification consumer. Version-1 migration preserves review
+history. Relevance uses actor identity, participation and conservative mention checks;
+notification toggles and canonical anchors use the existing coordinator/service.
+See [Phase 6A strategy, privacy, rate costs, limits and validation](phase-6a.md).

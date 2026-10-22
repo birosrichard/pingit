@@ -3,7 +3,7 @@
 Phases 1–3F, 4A (CI/diff metadata), 4B (native dashboard refinement),
 [4C (final dashboard polish)](phase-4c.md), [5A (background sync)](phase-5a.md),
 [5B (change detection)](phase-5b.md), and [5C (native notifications)](phase-5c.md)
-are implemented. Phase 5C awaits macOS compilation and runtime acceptance.
+are implemented. Phase 5C is merged and developer-validated locally. Phase 6A adds bounded conversation tracking; see its validation report.
 Further activity and distribution remain separately scoped.
 Keep each phase independently buildable and validate before moving on.
 
@@ -147,6 +147,15 @@ Keep each phase independently buildable and validate before moving on.
 - Mocked Swift Testing coverage written; Linux static checks pass.
 - Not compiled or tested on macOS; signed delivery, strict Swift 6 and lifecycle
   acceptance remain pending. See [implementation and checklist](phase-5c.md).
+
+## 6A. PR conversations and comment tracking — implemented
+
+- Issue comments, inline roots and review-thread replies, with conservative relevance.
+- Shared sync, batched probes, bounded complete details and explicit coverage barriers.
+- Version-1 snapshot migration preserves PR/review history; only minimal IDs persist.
+- Existing native notifications add comment/reply controls and optional Bot inclusion.
+- See [API costs, detection limits, validation and acceptance](phase-6a.md).
+- Activity feeds, unread counts, teams and further event types remain outside scope.
 
 ## 7. Preferences and reliability
 
