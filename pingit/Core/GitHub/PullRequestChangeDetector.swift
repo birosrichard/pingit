@@ -56,13 +56,24 @@ actor PullRequestChangeDetector {
                     complete(input.results[$0]?.authored) != nil && complete(input.results[$0]?.requested) != nil
                 }
             }
+            let commentEvents = ConversationChangeTracking.project(old: old, next: &next, input: input)
             guard next != old || baseline != next else {
                 lastSequence = input.sequence
                 return Output()
             }
             guard old.revision < UInt64.max else { return Output(storageFailed: true) }
             next.revision = old.revision + 1
-            let events = detect(old: old, next: next, input: input)
+            // A later search response must not notify again for a submitted review whose
+            // relevant inline comments were already consumed in an earlier committed flight.
+            let reviewEvents = detect(old: old, next: next, input: input).filter { event in
+                guard event.kind == .approved || event.kind == .changesRequested,
+                      !event.relatedReviewIDs.isEmpty else { return true }
+                let covered = Set(old.sources.values.flatMap {
+                    $0.conversations?[event.pullRequestID]?.reviewCommentIDs ?? []
+                })
+                return !Set(event.relatedReviewIDs).isSubset(of: covered)
+            }
+            let events = reviewEvents + commentEvents
             try Task.checkCancellation()
             try store.save(next)
             baseline = next
@@ -71,6 +82,13 @@ actor PullRequestChangeDetector {
             return Output(events: Task.isCancelled ? [] : events)
         } catch is CancellationError { return Output() }
         catch { return Output(storageFailed: true) }
+    }
+
+    func conversationPlan(scopeID: String, sections: PullRequestChangeInput.Sections,
+                          at: Date, generation: UInt64) -> GitHubConversationPlan {
+        guard generation >= self.generation, !Task.isCancelled else { return .init() }
+        do { try load() } catch { return .init() }
+        return ConversationChangeTracking.plan(source: baseline?.sources[scopeID], sections: sections, at: at)
     }
 
     private func load() throws {
@@ -91,6 +109,7 @@ actor PullRequestChangeDetector {
         let affected = removed.flatMap { [$0.authored, $0.requested].compactMap { $0 }.flatMap { $0.values.map(\.repositoryID) } }
         next.rebasingRepositories = active.isEmpty ? [] : Set(old.rebasingRepositories + affected).sorted()
         next.sources = old.sources.filter { active.contains($0.key) }
+        ConversationChangeTracking.reconcile(&next, scopes: Array(active))
         return next
     }
 
@@ -152,7 +171,7 @@ actor PullRequestChangeDetector {
         }
         var events: [PullRequestChangeEvent] = []
         func append(_ kind: PullRequestChangeEvent.Kind, id: String, state: PR, scopes: Set<String>,
-                    signal: PullRequestChangeEvent.Signal, before: String, after: String, reviewer: String? = nil) {
+                    signal: PullRequestChangeEvent.Signal, before: String, after: String, reviewer: String? = nil, reviewIDs: [String] = []) {
             let pr = live.first { $0.id == id }
             guard let repository = pr?.repository ?? live.first(where: { $0.repository.id == state.repositoryID })?.repository,
                   let url = pr?.browserURL ?? URL(string: repository.url.absoluteString + "/pull/\(state.number)") else { return }
@@ -163,7 +182,7 @@ actor PullRequestChangeDetector {
             events.append(.init(id: changeDigest(identity), kind: kind, pullRequestID: id,
                                 repository: repository, number: state.number, title: pr?.title, url: url,
                                 observedAt: input.observedAt, actorLogin: actor, signal: signal,
-                                previousState: before, currentState: after, sourceIDs: scopes.sorted()))
+                                previousState: before, currentState: after, sourceIDs: scopes.sorted(), relatedReviewIDs: reviewIDs))
         }
         for id in Set(requestsBefore.keys).union(requestsAfter.keys).sorted() {
             let before = requestsBefore[id] ?? [:], after = requestsAfter[id] ?? [:]
@@ -199,7 +218,11 @@ actor PullRequestChangeDetector {
             // Unknown -> known alone cannot distinguish metadata enrichment from new review activity.
             if let overallKind {
                 append(overallKind, id: id, state: current, scopes: scopes, signal: .decision,
-                       before: previous.decision!.rawValue, after: current.decision!.rawValue)
+                       before: previous.decision!.rawValue, after: current.decision!.rawValue,
+                       reviewIDs: (current.reviewers?.values.filter { review in
+                           !(previous.reviewers?.values.contains { $0.id == review.id } ?? false)
+                               && (overallKind == .approved ? review.state == .approved : review.state == .changesRequested)
+                       }.map(\.id)) ?? [])
             }
             guard before.values.allSatisfy({ $0.reviewsComplete && $0.reviewers == previous.reviewers }),
                   after.values.allSatisfy({ $0.reviewsComplete && $0.reviewers == current.reviewers }),
@@ -212,7 +235,7 @@ actor PullRequestChangeDetector {
                 let kind: PullRequestChangeEvent.Kind = review.state == .approved ? .approved : .changesRequested
                 guard kind != overallKind else { continue }
                 append(kind, id: id, state: current, scopes: scopes, signal: .reviewer,
-                       before: prior?.state.rawValue ?? "none", after: review.state.rawValue, reviewer: reviewer)
+                       before: prior?.state.rawValue ?? "none", after: review.state.rawValue, reviewer: reviewer, reviewIDs: [review.id])
             }
         }
         return events

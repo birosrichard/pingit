@@ -224,6 +224,9 @@ struct NotificationSettingsSection: View {
                 Toggle("Pull request approved", isOn: $preferences.approved)
                 Toggle("Changes requested", isOn: $preferences.changesRequested)
                 Toggle("Ready for review", isOn: $preferences.readyForReview)
+                Toggle("New PR and inline comments", isOn: $preferences.newPRComments)
+                Toggle("Review-thread replies", isOn: $preferences.reviewThreadReplies)
+                Toggle("Include automated bot comments", isOn: $preferences.botComments)
                 Toggle("Play a sound", isOn: $preferences.sound)
             }
             .disabled(!preferences.enabled)

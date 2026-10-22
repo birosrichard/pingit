@@ -10,6 +10,9 @@ final class NotificationPreferences {
     var approved: Bool { didSet { save(approved, key: "approved", previous: oldValue) } }
     var changesRequested: Bool { didSet { save(changesRequested, key: "changesRequested", previous: oldValue) } }
     var readyForReview: Bool { didSet { save(readyForReview, key: "readyForReview", previous: oldValue) } }
+    var newPRComments: Bool { didSet { save(newPRComments, key: "newPRComments", previous: oldValue) } }
+    var reviewThreadReplies: Bool { didSet { save(reviewThreadReplies, key: "reviewThreadReplies", previous: oldValue) } }
+    var botComments: Bool { didSet { save(botComments, key: "botComments", previous: oldValue) } }
     var sound: Bool { didSet { save(sound, key: "sound", previous: oldValue) } }
 
     @ObservationIgnored private let defaults: UserDefaults?
@@ -23,6 +26,9 @@ final class NotificationPreferences {
         approved = defaults?.object(forKey: "notifications.approved") as? Bool ?? true
         changesRequested = defaults?.object(forKey: "notifications.changesRequested") as? Bool ?? true
         readyForReview = defaults?.object(forKey: "notifications.readyForReview") as? Bool ?? false
+        newPRComments = defaults?.object(forKey: "notifications.newPRComments") as? Bool ?? true
+        reviewThreadReplies = defaults?.object(forKey: "notifications.reviewThreadReplies") as? Bool ?? true
+        botComments = defaults?.object(forKey: "notifications.botComments") as? Bool ?? false
         sound = defaults?.object(forKey: "notifications.sound") as? Bool ?? false
     }
 
@@ -34,6 +40,8 @@ final class NotificationPreferences {
         case .approved: return approved
         case .changesRequested: return changesRequested
         case .readyForReview: return readyForReview
+        case .newPRComment, .newInlineReviewComment: return newPRComments
+        case .newReviewThreadReply: return reviewThreadReplies
         }
     }
 

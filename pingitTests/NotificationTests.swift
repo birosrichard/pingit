@@ -228,6 +228,8 @@ struct NotificationDeliveryTests {
         case .approved: f.preferences.approved = false
         case .changesRequested: f.preferences.changesRequested = false
         case .readyForReview: f.preferences.readyForReview = false
+        case .newPRComment, .newInlineReviewComment: f.preferences.newPRComments = false
+        case .newReviewThreadReply: f.preferences.reviewThreadReplies = false
         }
         f.coordinator.consume([try f.event(kind)])
         await f.finish()
@@ -292,6 +294,9 @@ struct NotificationDeliveryTests {
         case .approved: expected = "Pull request approved"
         case .changesRequested: expected = "Changes requested"
         case .readyForReview: expected = "Ready for review"
+        case .newPRComment: expected = "New PR comment"
+        case .newInlineReviewComment: expected = "New inline review comment"
+        case .newReviewThreadReply: expected = "Reply in review thread"
         }
         #expect(message.title == expected)
         #expect(message.subtitle == "owner/repository #1")
@@ -572,4 +577,107 @@ struct NotificationIntegrationTests {
         #expect(f.service.attempts.count == 1)
     }
     #endif
+}
+
+@MainActor
+struct ConversationNotificationTests {
+    private func event(_ kind: PullRequestChangeEvent.Kind = .newPRComment, id: String = "comment",
+                       bot: Bool = false, reviewIDs: [String] = []) throws -> PullRequestChangeEvent {
+        let f = NotificationFixture()
+        let pr = try f.event(kind)
+        return .init(id: id, kind: kind, pullRequestID: pr.pullRequestID, repository: pr.repository, number: pr.number,
+            title: nil, url: URL(string: "https://github.com/owner/repository/pull/1#" +
+                (kind == .newPRComment ? "issuecomment-123" : "discussion_r456"))!,
+            observedAt: pr.observedAt, actorLogin: "reviewer", signal: .conversation,
+            previousState: "unseen", currentState: "published", sourceIDs: pr.sourceIDs,
+            actorIsBot: bot, relatedReviewIDs: reviewIDs)
+    }
+    @Test func commentPreferencesAndBotDefaultFilterDelivery() async throws {
+        let f = NotificationFixture()
+        f.preferences.enabled = true
+        f.preferences.newPRComments = false
+        f.coordinator.consume([try event(), try event(.newInlineReviewComment, id: "inline"),
+                               try event(.newReviewThreadReply, id: "reply"), try event(.newReviewThreadReply, id: "bot", bot: true)])
+        await f.finish()
+        #expect(f.service.delivered.map(\.title) == ["Reply in review thread"])
+        f.preferences.botComments = true
+        f.coordinator.consume([try event(.newReviewThreadReply, id: "opted-in-bot", bot: true)])
+        await f.finish()
+        #expect(f.service.delivered.count == 2)
+        f.preferences.reviewThreadReplies = false
+        f.coordinator.consume([try event(.newReviewThreadReply, id: "disabled")])
+        await f.finish()
+        #expect(f.service.delivered.count == 2)
+    }
+    @Test func newPreferenceValuesPersistWithoutChangingExistingDefaults() throws {
+        let name = "pingit.comments.tests.\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: name))
+        defer { defaults.removePersistentDomain(forName: name) }
+        let p = NotificationPreferences(defaults: defaults)
+        #expect(p.newPRComments && p.reviewThreadReplies && !p.botComments && !p.enabled)
+        p.newPRComments = false
+        p.reviewThreadReplies = false
+        p.botComments = true
+        let restored = NotificationPreferences(defaults: defaults)
+        #expect(!restored.newPRComments && !restored.reviewThreadReplies && restored.botComments)
+    }
+    @Test func conciseContentOpensSpecificDiscussion() throws {
+        let f = NotificationFixture()
+        let message = try #require(NotificationMessage(event: event(.newReviewThreadReply), sound: false))
+        #expect(message.body == "@reviewer replied to a discussion on #1.")
+        #expect(message.pullRequestURL.hasSuffix("#discussion_r456"))
+        var opened: URL?
+        let activation = NotificationActivation(openURL: { opened = $0; return true })
+        #expect(activation.activate(message.pullRequestURL))
+        #expect(opened?.fragment == "discussion_r456")
+        let comment = try #require(NotificationMessage(event: event(), sound: false))
+        #expect(comment.body == "@reviewer commented on #1.")
+        #expect(comment.subtitle == "owner/repository #1")
+        #expect(f.service.delivered.isEmpty)
+    }
+    @Test(arguments: [
+        "https://github.com/owner/repository/pull/1#issuecomment-123",
+        "https://github.com/owner/repository/pull/1#discussion_r456",
+        "https://github.com/owner/repository/pull/1/files#discussion_r456"
+    ]) func canonicalCommentDestinationsAreAccepted(_ url: String) {
+        #expect(GitHubNotificationURL.validate(url)?.absoluteString == url)
+        #expect(NotificationActivation.responseURL(identifier: "pingit.change.test", isDefaultAction: true, urlString: url) == url)
+    }
+    @Test(arguments: [
+        "https://github.com/owner/repository/pull/1#issuecomment-0",
+        "https://github.com/owner/repository/pull/1#discussion_r01",
+        "https://github.com/owner/repository/pull/1#issuecomment-123/evil",
+        "https://github.com/owner/repository/pull/1#discussion_r%31",
+        "https://github.com/owner/repository/pull/1/files#issuecomment-123",
+        "https://github.com/owner/repository/pull/1/files",
+        "https://github.com/owner/repository/pull/1#https://evil.example",
+        "https://github.com/owner/repository/pull/1?next=evil#discussion_r1",
+        "https://evil.example/owner/repository/pull/1#discussion_r1"
+    ]) func arbitraryCommentDestinationsAreRejected(_ url: String) {
+        #expect(GitHubNotificationURL.validate(url) == nil)
+    }
+    @Test func submittedReviewAndInlineCommentProduceOneNotification() async throws {
+        let f = NotificationFixture()
+        f.preferences.enabled = true
+        var approval = try f.event(.approved, id: "approval")
+        approval.relatedReviewIDs = ["REVIEW_1"]
+        let inline = try event(.newInlineReviewComment, reviewIDs: ["REVIEW_1"])
+        f.coordinator.consume([inline, approval])
+        await f.finish()
+        #expect(f.service.delivered.map(\.title) == ["Pull request approved"])
+        // An explicitly disabled approval preference must not swallow the comment.
+        f.preferences.approved = false
+        f.coordinator.consume([try event(.newInlineReviewComment, id: "other", reviewIDs: ["REVIEW_1"]), approval])
+        await f.finish()
+        #expect(f.service.delivered.map(\.title) == ["Pull request approved", "New inline review comment"])
+    }
+    @Test func repliesAreNotSwallowedByAnUnrelatedApproval() async throws {
+        let f = NotificationFixture()
+        f.preferences.enabled = true
+        var approval = try f.event(.approved)
+        approval.relatedReviewIDs = ["REVIEW_1"]
+        f.coordinator.consume([approval, try event(.newReviewThreadReply, reviewIDs: ["REVIEW_1"])])
+        await f.finish()
+        #expect(f.service.delivered.count == 2)
+    }
 }

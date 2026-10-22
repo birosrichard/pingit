@@ -61,10 +61,12 @@ struct DiscoveryCoveragePresentation {
 @Observable
 final class PullRequestDashboard {
     typealias Fetch = @Sendable (GitHubAccount, String, Bool) async throws -> GitHubPullRequestDiscoveryResult
+    typealias ConversationFetch = @Sendable (GitHubConversationPlan, GitHubAccount, String) async -> GitHubConversationResult
     struct SourceState: Equatable {
         let connection: GitHubTokenConnection
         var authored = PullRequestSectionState()
         var reviews = PullRequestSectionState()
+        var conversationWarning: String? = nil
     }
     private(set) var authored = PullRequestSectionState()
     private(set) var reviews = PullRequestSectionState()
@@ -97,6 +99,7 @@ final class PullRequestDashboard {
 
     @ObservationIgnored private let credential: (String) throws -> String?
     @ObservationIgnored private let fetch: Fetch
+    @ObservationIgnored private let fetchConversations: ConversationFetch?
     @ObservationIgnored private let now: () -> Date
     @ObservationIgnored private var connections: [GitHubTokenConnection] = []
     @ObservationIgnored private var task: Task<Void, Never>?
@@ -117,6 +120,9 @@ final class PullRequestDashboard {
             if reviews { return try await discovery.reviewRequestedPullRequests(for: account, token: token) }
             return try await discovery.authoredPullRequests(for: account, token: token)
         }
+        fetchConversations = { plan, account, token in
+            await discovery.conversations(plan: plan, account: account, token: token)
+        }
         now = Date.init
     }
 
@@ -124,6 +130,7 @@ final class PullRequestDashboard {
          clock: SyncClock = .continuous, jitter: @escaping () -> Double = { Double.random(in: 0...1) },
          fetch: @escaping Fetch) {
         changeDetector = nil
+        fetchConversations = nil
         syncPreferences = BackgroundSyncPreferences()
         scheduler = BackgroundSyncScheduler(clock: clock)
         self.jitter = jitter
@@ -135,12 +142,14 @@ final class PullRequestDashboard {
     init(scopedCredential: @escaping (String) throws -> String?, now: @escaping () -> Date = Date.init,
          clock: SyncClock = .continuous, jitter: @escaping () -> Double = { Double.random(in: 0...1) },
          changeDetector: PullRequestChangeDetector? = nil,
-         preferences: BackgroundSyncPreferences = BackgroundSyncPreferences(), fetch: @escaping Fetch) {
+         preferences: BackgroundSyncPreferences = BackgroundSyncPreferences(),
+         conversationFetch: ConversationFetch? = nil, fetch: @escaping Fetch) {
         self.changeDetector = changeDetector
         syncPreferences = preferences
         scheduler = BackgroundSyncScheduler(clock: clock)
         self.jitter = jitter
         credential = scopedCredential
+        fetchConversations = conversationFetch
         self.now = now
         self.fetch = fetch
     }
@@ -368,6 +377,22 @@ final class PullRequestDashboard {
         async let reviews: Void = loadSection(id: row.id, account: account, token: token, reviews: true, session: session)
         _ = await (authored, reviews)
         guard self.session == session, !Task.isCancelled else { return }
+        if let changeDetector, let fetchConversations, let sections = flightResults[row.storageAccount] {
+            let generation = connectionGeneration
+            let plan = await changeDetector.conversationPlan(scopeID: row.storageAccount, sections: sections,
+                                                            at: now(), generation: generation)
+            guard self.session == session, !Task.isCancelled else { return }
+            let result = await fetchConversations(plan, account, token)
+            guard self.session == session, !Task.isCancelled else { return }
+            flightResults[row.storageAccount, default: .init()].conversations = result
+            sources[row.id]?.conversationWarning = result.limited || result.error != nil
+                ? "Conversation coverage is incomplete. Some comment notifications are paused." : nil
+            // Comment permission errors do not invalidate otherwise healthy PR discovery.
+            // Rate restrictions still gate this token's next shared refresh.
+            if let error = result.error, error == .rateLimited || error.retryDeadline != nil {
+                flightErrors[row.id, default: []].append(error)
+            }
+        }
         if let errors = flightErrors[row.id], !errors.isEmpty {
             let apiErrors = errors.compactMap { $0 as? GitHubAPIError }
             let authError = apiErrors.first { $0 == .invalidToken || $0 == .forbidden }

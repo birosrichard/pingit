@@ -3,7 +3,7 @@
 A lightweight, native macOS menu bar app for GitHub activity. The goal is to show
 pull requests, reviews, comments, and CI updates that need your attention.
 
-**Current status: Phase 5B — Reliable Pull Request Change Detection.**
+**Current status: Phase 6A — PR Conversations & Comment Tracking.**
 Connect one GitHub.com identity with multiple tokens stored independently in macOS
 Keychain. Review / My PRs / Drafts show clearer native PR rows, repository/owner
 identity, independent review context and compact file/addition/deletion totals.
@@ -26,7 +26,11 @@ switches and explicit macOS permission. Private PR metadata may appear in macOS
 Notification Center when enabled. A minimal local baseline detects direct
 review-request, review and draft-ready changes across refreshes and restarts; that
 baseline excludes titles, repository names and event history.
-**Phase 5C is not compiled or tested on macOS — awaiting local validation.**
+Phase 5C notifications are merged; the developer confirmed local validation.
+Phase 6A adds conservative PR comment and review-thread reply notifications using
+bounded batched queries and minimal persistent comment IDs. Own comments are quiet;
+automated Bot comments are off by default. No feed, unread count or dashboard tab is added.
+See [Phase 6A coverage, privacy, API costs, validation and acceptance](docs/phase-6a.md).
 See [notification behavior, privacy and macOS acceptance](docs/phase-5c.md),
 [change detection and validation](docs/phase-5b.md),
 [background sync and validation](docs/phase-5a.md),

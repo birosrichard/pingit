@@ -4,8 +4,9 @@ import Foundation
 struct PullRequestChangeEvent: Equatable, Sendable, Identifiable {
     enum Kind: String, Codable, Sendable {
         case reviewRequested, reviewRequestRemoved, approved, changesRequested, readyForReview
+        case newPRComment, newInlineReviewComment, newReviewThreadReply
     }
-    enum Signal: String, Sendable { case membership, decision, reviewer, draft }
+    enum Signal: String, Sendable { case membership, decision, reviewer, draft, conversation }
     let id: String
     let kind: Kind
     let pullRequestID: String
@@ -20,21 +21,26 @@ struct PullRequestChangeEvent: Equatable, Sendable, Identifiable {
     let previousState: String
     let currentState: String
     let sourceIDs: [String]
+    var actorIsBot = false
+    var relatedReviewIDs: [String] = []
+    var threadID: String? = nil
 }
 
 // Disk values deliberately omit repository names, titles, URLs and reviewer logins.
 struct PullRequestChangeSnapshot: Codable, Equatable, Sendable {
-    static let schemaVersion = 1
+    static let schemaVersion = 2
     var version = schemaVersion
     var identity: String
     var epoch = UUID()
     var revision: UInt64 = 0
     var sources: [String: Source] = [:]
     var rebasingRepositories: [String] = []
+    var conversationScopes: [String]? = nil
 
     struct Source: Codable, Equatable, Sendable {
         var authored: [String: PullRequest]?
         var requested: [String: PullRequest]?
+        var conversations: [String: Conversation]? = nil
     }
     struct PullRequest: Codable, Equatable, Sendable {
         let repositoryID: String
@@ -91,5 +97,6 @@ struct PullRequestChangeInput: Sendable {
     struct Sections: Sendable {
         var authored: GitHubPullRequestDiscoveryResult?
         var requested: GitHubPullRequestDiscoveryResult?
+        var conversations: GitHubConversationResult? = nil
     }
 }

@@ -45,6 +45,10 @@ struct GitHubPullRequestDiscovery: Sendable {
         self.client = client
     }
 
+    func conversations(plan: GitHubConversationPlan, account: GitHubAccount, token: String) async -> GitHubConversationResult {
+        await GitHubConversationDiscovery(client: client).fetch(plan: plan, account: account, token: token)
+    }
+
     // Supply the account validated by GitHubConnection and its existing Keychain token.
     func authoredPullRequests(
         for account: GitHubAccount, token: String, maximumResults: Int = 200
