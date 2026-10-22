@@ -3,7 +3,7 @@
 A lightweight, native macOS menu bar app for GitHub activity. The goal is to show
 pull requests, reviews, comments, and CI updates that need your attention.
 
-**Current status: Phase 6A — PR Conversations & Comment Tracking.**
+**Current status: Phase 6B — Pull Request Lifecycle Tracking (stacked on Phase 6A).**
 Connect one GitHub.com identity with multiple tokens stored independently in macOS
 Keychain. Review / My PRs / Drafts show clearer native PR rows, repository/owner
 identity, independent review context and compact file/addition/deletion totals.
@@ -30,7 +30,11 @@ Phase 5C notifications are merged; the developer confirmed local validation.
 Phase 6A adds conservative PR comment and review-thread reply notifications using
 bounded batched queries and minimal persistent comment IDs. Own comments are quiet;
 automated Bot comments are off by default. No feed, unread count or dashboard tab is added.
-See [Phase 6A coverage, privacy, API costs, validation and acceptance](docs/phase-6a.md).
+Phase 6B adds authoritative merge, close and reopen tracking for previously observed
+authored PRs, with bounded node lookups and no new dashboard tab. Merged alerts
+default on when master notifications are enabled; closure/reopen alerts default off.
+See [Phase 6B retention, API budget, migration and acceptance](docs/phase-6b.md) and
+[Phase 6A coverage, privacy, API costs, validation and acceptance](docs/phase-6a.md).
 See [notification behavior, privacy and macOS acceptance](docs/phase-5c.md),
 [change detection and validation](docs/phase-5b.md),
 [background sync and validation](docs/phase-5a.md),
@@ -149,7 +153,7 @@ claiming that credentials were saved or removed.
 
 ## Validation
 
-Pull requests to `main` run the native app build and full automated suite on
+Pull requests to `main` or the stacked base `feat/pr-comment-tracking` run the native app build and full automated suite on
 GitHub-hosted macOS with pinned Xcode 26.3 and ad hoc signing. See
 [macOS CI](docs/ci.md) for toolchain checks, logs, local reproduction, signing
 boundaries, and Linux validation limits.
