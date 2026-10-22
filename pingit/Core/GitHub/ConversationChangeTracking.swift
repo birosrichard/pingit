@@ -5,7 +5,7 @@ enum ConversationChangeTracking {
     static func plan(source: PullRequestChangeSnapshot.Source?, sections: PullRequestChangeInput.Sections,
                      at: Date) -> GitHubConversationPlan {
         // Stale, conflicting and truncated search results cannot prove current eligibility.
-        guard complete(sections.authored), complete(sections.requested) else { return .init() }
+        guard complete(sections.authored), complete(sections.requested) else { return .init(limited: true) }
         let authored = Set(sections.authored?.pullRequests.map(\.id) ?? [])
         let requested = Set(sections.requested?.pullRequests.map(\.id) ?? [])
         let old = source?.conversations ?? [:]
@@ -22,7 +22,7 @@ enum ConversationChangeTracking {
                 lastRequestedAt: requested.contains(id) ? at : old[id]?.lastRequestedAt,
                 fingerprint: old[id]?.comparable == true ? old[id]?.fingerprint : nil)
         }
-        return .init(targets: targets)
+        return .init(targets: targets, limited: ids.count > GitHubConversationPlan.maximumPullRequests)
     }
 
     static func reconcile(_ snapshot: inout PullRequestChangeSnapshot, scopes: [String]) {
@@ -54,6 +54,7 @@ enum ConversationChangeTracking {
                 // Prune only when fresh complete eligibility searches prove the retention expired.
                 let eligible = Set(plan(source: old.sources[scope.id], sections: sections, at: input.observedAt).targets.map(\.id))
                 values = values.filter { eligible.contains($0.key) }
+                for id in result.retiredIDs { values.removeValue(forKey: id) }
                 for (id, observation) in result.observations where eligible.contains(id) {
                     let prior = previous[id]
                     guard observation.verifiedAt <= input.observedAt,

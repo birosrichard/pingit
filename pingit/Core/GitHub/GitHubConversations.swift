@@ -34,6 +34,7 @@ struct GitHubConversationPlan: Sendable {
         let fingerprint: String?
     }
     var targets: [Target] = []
+    var limited = false
 }
 
 struct GitHubConversationResult: Sendable {
@@ -41,6 +42,7 @@ struct GitHubConversationResult: Sendable {
     var attemptedIDs: [String] = []
     var limited = false
     var error: GitHubAPIError?
+    var retiredIDs: [String] = []
 }
 
 extension PullRequestChangeSnapshot {
@@ -67,7 +69,7 @@ struct GitHubConversationDiscovery: Sendable {
         var result = GitHubConversationResult()
         let targets = Array(plan.targets.prefix(GitHubConversationPlan.maximumPullRequests))
         result.attemptedIDs = targets.map(\.id)
-        result.limited = plan.targets.count > targets.count
+        result.limited = plan.limited || plan.targets.count > targets.count
         guard !targets.isEmpty else { return result }
         do {
             for offset in stride(from: 0, to: targets.count, by: Self.batchSize) {
@@ -79,8 +81,15 @@ struct GitHubConversationDiscovery: Sendable {
                 try probe.validate(account: account, ids: batch.map(\.id))
                 var changed: [GitHubConversationPlan.Target] = []
                 for target in batch {
-                    guard let node = probe.nodes.compactMap({ $0 }).first(where: { $0.id == target.id }),
-                          node.state == "OPEN", let fingerprint = try node.fingerprint() else {
+                    guard let node = probe.nodes.compactMap({ $0 }).first(where: { $0.id == target.id }) else {
+                        result.limited = true
+                        continue
+                    }
+                    if ["CLOSED", "MERGED"].contains(node.state) {
+                        result.retiredIDs.append(target.id)
+                        continue
+                    }
+                    guard node.state == "OPEN", let fingerprint = try node.fingerprint() else {
                         result.limited = true
                         continue
                     }
@@ -237,7 +246,7 @@ struct GitHubConversationDiscovery: Sendable {
                     // Participation is established by authoritative thread membership before this comment.
                     let participated = try nodes.contains { prior in
                         guard prior.author?.isViewer(viewer) == true, let published = prior.publishedAt else { return false }
-                        return try date(published) <= time
+                        return try date(published) < time
                     }
                     var reviewID: String?
                     if let review = comment.pullRequestReview, let submitted = review.submittedAt,

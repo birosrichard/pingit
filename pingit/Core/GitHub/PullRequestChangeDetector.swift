@@ -210,7 +210,7 @@ actor PullRequestChangeDetector {
                 append(overallKind, id: id, state: current, scopes: scopes, signal: .decision,
                        before: previous.decision!.rawValue, after: current.decision!.rawValue,
                        reviewIDs: (current.reviewers?.values.filter { review in
-                           !(previous.reviewers?.values.contains { $0.id == review.id } ?? true)
+                           !(previous.reviewers?.values.contains { $0.id == review.id } ?? false)
                                && (review.state == .approved || review.state == .changesRequested)
                        }.map(\.id)) ?? [])
             }

@@ -149,7 +149,9 @@ struct ConversationDetectionTests {
         let f = ConversationFixture(), d = PullRequestChangeDetector(store: f.memory.store)
         _ = await d.process(f.input(1), generation: 1)
         let prior = try #require(try f.memory.store.load())
-        var object = try #require(JSONSerialization.jsonObject(with: #require(f.memory.data)) as? [String: Any])
+        let bytes = try #require(f.memory.data)
+        let decoded = try JSONSerialization.jsonObject(with: bytes)
+        var object = try #require(decoded as? [String: Any])
         object["version"] = 1
         object.removeValue(forKey: "conversationScopes")
         var sources = try #require(object["sources"] as? [String: [String: Any]])
@@ -303,5 +305,94 @@ struct ConversationDiscoveryTests {
         let healthy = ConversationHTTPFixture.http(try ConversationHTTPFixture.response())
         let other = await GitHubConversationDiscovery(client: healthy.client).fetch(plan: ConversationHTTPFixture.plan(), account: account, token: "healthy-token")
         #expect(other.error == nil && other.observations.count == 1)
+    }
+}
+
+private actor ConversationFlight {
+    let fixture = ConversationFixture()
+    var sequence: UInt64 = 1
+    var fail = false
+    var hold = false
+    var pending: CheckedContinuation<GitHubConversationResult, Never>?
+    func configure(_ sequence: UInt64, fail: Bool = false, hold: Bool = false) {
+        self.sequence = sequence; self.fail = fail; self.hold = hold
+    }
+    func sections(review: Bool) -> GitHubPullRequestDiscoveryResult {
+        let input = fixture.input(sequence)
+        return (review ? input.results[fixture.scope.id]?.requested : input.results[fixture.scope.id]?.authored)!
+    }
+    func conversations() async -> GitHubConversationResult {
+        if hold { return await withCheckedContinuation { pending = $0 } }
+        return result()
+    }
+    private func result() -> GitHubConversationResult {
+        if fail { return .init(attemptedIDs: ["PR_1"], error: .forbidden) }
+        return fixture.input(sequence, comments: sequence == 1 ? [] : [fixture.comment()])
+            .results[fixture.scope.id]!.conversations!
+    }
+    func waitUntilHeld() async {
+        let deadline = ContinuousClock.now + .seconds(5)
+        while pending == nil, ContinuousClock.now < deadline { await Task.yield() }
+        #expect(pending != nil)
+    }
+    func release() { pending?.resume(returning: result()); pending = nil; hold = false }
+}
+
+@MainActor
+struct ConversationRefreshTests {
+    private func finish(_ dashboard: PullRequestDashboard) async {
+        let deadline = ContinuousClock.now + .seconds(5)
+        while dashboard.isRefreshing, ContinuousClock.now < deadline { await Task.yield() }
+        #expect(!dashboard.isRefreshing)
+    }
+    @Test func sharedRefreshCommitsCommentsAndIsolatesConversationFailures() async {
+        let f = ConversationFixture(), flight = ConversationFlight()
+        var time = Date(timeIntervalSince1970: 100)
+        let dashboard = PullRequestDashboard(scopedCredential: { _ in "test-token" }, now: { time },
+            changeDetector: .init(store: f.memory.store),
+            conversationFetch: { _, _, _ in await flight.conversations() },
+            fetch: { _, _, review in await flight.sections(review: review) })
+        var events: [PullRequestChangeEvent] = []
+        dashboard.onChanges = { events += $0 }
+        dashboard.setConnections([f.row], refresh: false)
+        dashboard.refresh()
+        dashboard.refresh() // coalesces into the same flight
+        await finish(dashboard)
+        #expect(events.isEmpty)
+        time = Date(timeIntervalSince1970: 200)
+        await flight.configure(2)
+        dashboard.refresh()
+        await finish(dashboard)
+        #expect(events.map(\.kind) == [.newPRComment])
+        time = Date(timeIntervalSince1970: 300)
+        await flight.configure(3, fail: true)
+        dashboard.refresh()
+        await finish(dashboard)
+        #expect(dashboard.authored.phase == .loaded && dashboard.authored.errorMessage == nil)
+        #expect(dashboard.sources[f.row.id]?.conversationWarning != nil)
+        #expect(events.count == 1)
+        dashboard.shutdown()
+    }
+    @Test func cancelledConversationCannotDeliverFromStaleFlight() async {
+        let f = ConversationFixture(), flight = ConversationFlight()
+        var time = Date(timeIntervalSince1970: 100)
+        let dashboard = PullRequestDashboard(scopedCredential: { _ in "test-token" }, now: { time },
+            changeDetector: .init(store: f.memory.store),
+            conversationFetch: { _, _, _ in await flight.conversations() },
+            fetch: { _, _, review in await flight.sections(review: review) })
+        var events: [PullRequestChangeEvent] = []
+        dashboard.onChanges = { events += $0 }
+        dashboard.setConnections([f.row], refresh: false)
+        dashboard.refresh()
+        await finish(dashboard)
+        await flight.configure(2, hold: true)
+        time = Date(timeIntervalSince1970: 200)
+        dashboard.refresh()
+        await flight.waitUntilHeld()
+        dashboard.systemWillSleep()
+        await flight.release()
+        await finish(dashboard)
+        #expect(events.isEmpty)
+        dashboard.shutdown()
     }
 }
