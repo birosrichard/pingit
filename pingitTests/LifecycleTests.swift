@@ -48,7 +48,7 @@ private struct LifecycleFixture: Sendable {
         let owner = scopes.map(\.id).sorted().first
         let sections = Dictionary(uniqueKeysWithValues: scopes.compactMap { scope -> (String, PullRequestChangeInput.Sections)? in
             if failed.contains(scope.id) { return nil }
-            let observation = state.map { observation($0, sequence: sequence) }
+            let observation = state.map { self.observation($0, sequence: sequence) }
             let lifecycle: GitHubLifecycleResult? = scope.id == owner
                 ? .init(observations: observation.map { ["PR_1": $0] } ?? [:], limited: state == nil) : nil
             return (scope.id, .init(authored: requestedOnly ? empty : result, requested: requestedOnly ? result : empty,
@@ -265,7 +265,25 @@ struct LifecycleTransportTests {
     func readsAuthoritativeStatesWithoutConversationOrHistoryQueries(state: String) async {
         let f = LifecycleFixture(), body = response(state: state)
         let http = MockHTTP { request in
-            let text = String(decoding: request.httpBody ?? Data(), as: UTF8.self)
+            let data: Data
+            if let body = request.httpBody { data = body }
+            else {
+                let stream = try #require(request.httpBodyStream)
+                stream.open()
+                defer { stream.close() }
+                var bytes = Data()
+                var buffer = [UInt8](repeating: 0, count: 4096)
+                while stream.hasBytesAvailable {
+                    let count = stream.read(&buffer, maxLength: buffer.count)
+                    guard count >= 0 else { throw GitHubAPIError.unexpectedResponse }
+                    if count == 0 { break }
+                    bytes.append(contentsOf: buffer.prefix(count))
+                }
+                data = bytes
+            }
+            let payload = try JSONSerialization.jsonObject(with: data)
+            let envelope = try #require(payload as? [String: Any])
+            let text = try #require(envelope["query"] as? String)
             #expect(text.contains("PullRequestLifecycle") && text.contains("nodes(ids:"))
             #expect(!text.contains("comments(") && !text.contains("search(") && !text.contains("body"))
             return (HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!, Data(body.utf8))

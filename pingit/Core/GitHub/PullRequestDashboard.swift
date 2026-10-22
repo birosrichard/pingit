@@ -360,6 +360,9 @@ final class PullRequestDashboard {
             }
             if self.session == session, !Task.isCancelled {
                 await loadLifecycles(work: work, session: session)
+                if self.session == session, !Task.isCancelled {
+                    for (row, _) in work { finishSourceSync(row) }
+                }
             }
             watchdog?.cancel()
             watchdog = nil
@@ -410,9 +413,7 @@ final class PullRequestDashboard {
             }
             if let error = result.error {
                 blocked.insert(batch.scopeID)
-                if error == .rateLimited || error.retryDeadline != nil || error == .invalidToken || error == .forbidden {
-                    syncStates[row.id]?.failed(error, time: scheduler.clock.now(), date: now(), jitter: jitter())
-                }
+                flightErrors[row.id, default: []].append(error)
             }
         }
     }
@@ -439,6 +440,9 @@ final class PullRequestDashboard {
                 flightErrors[row.id, default: []].append(error)
             }
         }
+    }
+
+    private func finishSourceSync(_ row: GitHubTokenConnection) {
         if let errors = flightErrors[row.id], !errors.isEmpty {
             let apiErrors = errors.compactMap { $0 as? GitHubAPIError }
             let authError = apiErrors.first { $0 == .invalidToken || $0 == .forbidden }
