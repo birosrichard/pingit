@@ -62,11 +62,13 @@ struct DiscoveryCoveragePresentation {
 final class PullRequestDashboard {
     typealias Fetch = @Sendable (GitHubAccount, String, Bool) async throws -> GitHubPullRequestDiscoveryResult
     typealias ConversationFetch = @Sendable (GitHubConversationPlan, GitHubAccount, String) async -> GitHubConversationResult
+    typealias LifecycleFetch = @Sendable ([String], GitHubAccount, String) async -> GitHubLifecycleResult
     struct SourceState: Equatable {
         let connection: GitHubTokenConnection
         var authored = PullRequestSectionState()
         var reviews = PullRequestSectionState()
         var conversationWarning: String? = nil
+        var lifecycleWarning: String? = nil
     }
     private(set) var authored = PullRequestSectionState()
     private(set) var reviews = PullRequestSectionState()
@@ -100,6 +102,7 @@ final class PullRequestDashboard {
     @ObservationIgnored private let credential: (String) throws -> String?
     @ObservationIgnored private let fetch: Fetch
     @ObservationIgnored private let fetchConversations: ConversationFetch?
+    @ObservationIgnored private let fetchLifecycles: LifecycleFetch?
     @ObservationIgnored private let now: () -> Date
     @ObservationIgnored private var connections: [GitHubTokenConnection] = []
     @ObservationIgnored private var task: Task<Void, Never>?
@@ -123,6 +126,9 @@ final class PullRequestDashboard {
         fetchConversations = { plan, account, token in
             await discovery.conversations(plan: plan, account: account, token: token)
         }
+        fetchLifecycles = { ids, account, token in
+            await discovery.lifecycles(ids: ids, account: account, token: token)
+        }
         now = Date.init
     }
 
@@ -131,6 +137,7 @@ final class PullRequestDashboard {
          fetch: @escaping Fetch) {
         changeDetector = nil
         fetchConversations = nil
+        fetchLifecycles = nil
         syncPreferences = BackgroundSyncPreferences()
         scheduler = BackgroundSyncScheduler(clock: clock)
         self.jitter = jitter
@@ -143,13 +150,14 @@ final class PullRequestDashboard {
          clock: SyncClock = .continuous, jitter: @escaping () -> Double = { Double.random(in: 0...1) },
          changeDetector: PullRequestChangeDetector? = nil,
          preferences: BackgroundSyncPreferences = BackgroundSyncPreferences(),
-         conversationFetch: ConversationFetch? = nil, fetch: @escaping Fetch) {
+         conversationFetch: ConversationFetch? = nil, lifecycleFetch: LifecycleFetch? = nil, fetch: @escaping Fetch) {
         self.changeDetector = changeDetector
         syncPreferences = preferences
         scheduler = BackgroundSyncScheduler(clock: clock)
         self.jitter = jitter
         credential = scopedCredential
         fetchConversations = conversationFetch
+        fetchLifecycles = lifecycleFetch
         self.now = now
         self.fetch = fetch
     }
@@ -312,7 +320,7 @@ final class PullRequestDashboard {
             }
         }
         rebuild()
-        guard !work.isEmpty else { reschedule(); return }
+        guard !work.isEmpty || changeDetector != nil else { reschedule(); return }
         isRefreshing = true
         let session = session
         let sleep = scheduler.clock.sleep
@@ -350,6 +358,12 @@ final class PullRequestDashboard {
                     }
                 }
             }
+            if self.session == session, !Task.isCancelled {
+                await loadLifecycles(work: work, session: session)
+                if self.session == session, !Task.isCancelled {
+                    for (row, _) in work { finishSourceSync(row) }
+                }
+            }
             watchdog?.cancel()
             watchdog = nil
             if self.session == session, !Task.isCancelled, let changeDetector {
@@ -368,6 +382,39 @@ final class PullRequestDashboard {
                 refresh()
             }
             reschedule()
+        }
+    }
+
+    private func loadLifecycles(work: [(GitHubTokenConnection, String)], session: UUID) async {
+        guard let changeDetector, let fetchLifecycles else { return }
+        let input = PullRequestChangeInput(sequence: refreshSequence, scopes: connections.compactMap(PullRequestChangeScope.init),
+                                           results: flightResults, observedAt: now())
+        let plan = await changeDetector.lifecyclePlan(input, generation: connectionGeneration)
+        guard self.session == session, !Task.isCancelled else { return }
+        for (row, _) in work {
+            sources[row.id]?.lifecycleWarning = plan.limited
+                ? "Lifecycle coverage is incomplete. Some lifecycle notifications are paused." : nil
+        }
+        var blocked: Set<String> = []
+        for batch in plan.batches {
+            guard self.session == session, !Task.isCancelled else { return }
+            guard !blocked.contains(batch.scopeID),
+                  let (row, token) = work.first(where: { $0.0.storageAccount == batch.scopeID }),
+                  let account = row.account else { continue }
+            let result = await fetchLifecycles(batch.ids, account, token)
+            guard self.session == session, !Task.isCancelled else { return }
+            var combined = flightResults[batch.scopeID]?.lifecycles ?? .init()
+            combined.observations.merge(result.observations, uniquingKeysWith: { first, _ in first })
+            combined.limited = combined.limited || result.limited
+            combined.error = result.error ?? combined.error
+            flightResults[batch.scopeID, default: .init()].lifecycles = combined
+            if result.limited || result.error != nil {
+                sources[row.id]?.lifecycleWarning = "Lifecycle coverage is incomplete. Some lifecycle notifications are paused."
+            }
+            if let error = result.error {
+                blocked.insert(batch.scopeID)
+                flightErrors[row.id, default: []].append(error)
+            }
         }
     }
 
@@ -393,6 +440,9 @@ final class PullRequestDashboard {
                 flightErrors[row.id, default: []].append(error)
             }
         }
+    }
+
+    private func finishSourceSync(_ row: GitHubTokenConnection) {
         if let errors = flightErrors[row.id], !errors.isEmpty {
             let apiErrors = errors.compactMap { $0 as? GitHubAPIError }
             let authError = apiErrors.first { $0 == .invalidToken || $0 == .forbidden }

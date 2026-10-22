@@ -5,8 +5,9 @@ struct PullRequestChangeEvent: Equatable, Sendable, Identifiable {
     enum Kind: String, Codable, Sendable {
         case reviewRequested, reviewRequestRemoved, approved, changesRequested, readyForReview
         case newPRComment, newInlineReviewComment, newReviewThreadReply
+        case prMerged, prClosed, prReopened
     }
-    enum Signal: String, Sendable { case membership, decision, reviewer, draft, conversation }
+    enum Signal: String, Sendable { case membership, decision, reviewer, draft, conversation, lifecycle }
     let id: String
     let kind: Kind
     let pullRequestID: String
@@ -28,7 +29,7 @@ struct PullRequestChangeEvent: Equatable, Sendable, Identifiable {
 
 // Disk values deliberately omit repository names, titles, URLs and reviewer logins.
 struct PullRequestChangeSnapshot: Codable, Equatable, Sendable {
-    static let schemaVersion = 2
+    static let schemaVersion = 3
     var version = schemaVersion
     var identity: String
     var epoch = UUID()
@@ -36,6 +37,8 @@ struct PullRequestChangeSnapshot: Codable, Equatable, Sendable {
     var sources: [String: Source] = [:]
     var rebasingRepositories: [String] = []
     var conversationScopes: [String]? = nil
+    var lifecycleScopes: [String]? = nil
+    var lifecycles: [String: Lifecycle]? = nil
 
     struct Source: Codable, Equatable, Sendable {
         var authored: [String: PullRequest]?
@@ -98,5 +101,6 @@ struct PullRequestChangeInput: Sendable {
         var authored: GitHubPullRequestDiscoveryResult?
         var requested: GitHubPullRequestDiscoveryResult?
         var conversations: GitHubConversationResult? = nil
+        var lifecycles: GitHubLifecycleResult? = nil
     }
 }

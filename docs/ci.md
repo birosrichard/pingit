@@ -1,7 +1,8 @@
 # macOS build and test CI
 
 [`macOS CI`](../.github/workflows/macos.yml) runs for pull requests targeting
-`main` (the repository's default branch), including drafts, and for manual
+`main` (the repository's default branch) or the stacked base
+`feat/pr-comment-tracking`, including drafts, and for manual
 `workflow_dispatch` runs. If the default branch is renamed, update the branch
 filter. Manual dispatch becomes available in GitHub's Actions UI once the workflow
 exists on the default branch.

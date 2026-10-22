@@ -36,10 +36,10 @@ struct PullRequestSnapshotStore: Sendable {
         guard data.count <= Self.maximumBytes else { throw Failure.tooLarge }
         // Invalid/incompatible content is a new baseline, never historical activity.
         guard var value = try? JSONDecoder().decode(PullRequestChangeSnapshot.self, from: data),
-              value.version == 1 || value.version == PullRequestChangeSnapshot.schemaVersion else { return nil }
-        // Optional new fields decode absent v1 conversations as an unestablished baseline.
+              (1...PullRequestChangeSnapshot.schemaVersion).contains(value.version) else { return nil }
+        // Optional fields decode absent v1 conversations and v1/v2 lifecycle state quietly.
         // Keep identity, epoch, revision, PR/reviewer history and coverage barriers intact.
-        if value.version == 1 { value.version = PullRequestChangeSnapshot.schemaVersion }
+        value.version = PullRequestChangeSnapshot.schemaVersion
         guard (try? Self.validate(value)) != nil else { return nil }
         return value
     }
@@ -58,6 +58,16 @@ struct PullRequestSnapshotStore: Sendable {
               value.identity.count == 64, value.sources.count <= 64,
               (value.conversationScopes?.count ?? 0) <= 64,
               value.conversationScopes?.allSatisfy({ !$0.isEmpty && $0.utf8.count <= 128 }) ?? true,
+              (value.lifecycleScopes?.count ?? 0) <= 64,
+              (value.lifecycleScopes?.allSatisfy { !$0.isEmpty && $0.utf8.count <= 128 } ?? true),
+              (value.lifecycles?.count ?? 0) <= GitHubLifecyclePlan.maximumPullRequests,
+              (value.lifecycles?.allSatisfy { id, pr in
+                  !id.isEmpty && id.utf8.count <= 256 && !pr.repositoryID.isEmpty
+                      && pr.repositoryID.utf8.count <= 256 && pr.number > 0
+                      && !pr.sourceIDs.isEmpty && pr.sourceIDs.count <= 64
+                      && Set(pr.sourceIDs).count == pr.sourceIDs.count
+                      && pr.sourceIDs.allSatisfy { !$0.isEmpty && $0.utf8.count <= 128 }
+              } ?? true),
               value.sources.values.reduce(0, { total, source in
                   total + (source.conversations?.values.reduce(0, { $0 + $1.commentIDs.count }) ?? 0)
               }) <= 100_000,
