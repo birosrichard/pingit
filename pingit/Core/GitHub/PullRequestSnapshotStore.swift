@@ -35,8 +35,12 @@ struct PullRequestSnapshotStore: Sendable {
         guard let data = try read() else { return nil }
         guard data.count <= Self.maximumBytes else { throw Failure.tooLarge }
         // Invalid/incompatible content is a new baseline, never historical activity.
-        guard let value = try? JSONDecoder().decode(PullRequestChangeSnapshot.self, from: data),
-              (try? Self.validate(value)) != nil else { return nil }
+        guard var value = try? JSONDecoder().decode(PullRequestChangeSnapshot.self, from: data),
+              value.version == 1 || value.version == PullRequestChangeSnapshot.schemaVersion else { return nil }
+        // Optional new fields decode absent v1 conversations as an unestablished baseline.
+        // Keep identity, epoch, revision, PR/reviewer history and coverage barriers intact.
+        if value.version == 1 { value.version = PullRequestChangeSnapshot.schemaVersion }
+        guard (try? Self.validate(value)) != nil else { return nil }
         return value
     }
 
@@ -52,9 +56,23 @@ struct PullRequestSnapshotStore: Sendable {
     static func validate(_ value: PullRequestChangeSnapshot) throws {
         guard value.version == PullRequestChangeSnapshot.schemaVersion,
               value.identity.count == 64, value.sources.count <= 64,
+              (value.conversationScopes?.count ?? 0) <= 64,
+              value.conversationScopes?.allSatisfy({ !$0.isEmpty && $0.utf8.count <= 128 }) ?? true,
+              value.sources.values.reduce(0, { total, source in
+                  total + (source.conversations?.values.reduce(0, { $0 + $1.commentIDs.count }) ?? 0)
+              }) <= 100_000,
               value.sources.values.reduce(0, { $0 + ($1.authored?.count ?? 0) + ($1.requested?.count ?? 0) }) <= maximumEntries,
               value.sources.allSatisfy({ key, source in
-                  !key.isEmpty && key.utf8.count <= 128 && [source.authored, source.requested].allSatisfy { section in
+                  !key.isEmpty && key.utf8.count <= 128
+                      && (source.conversations?.count ?? 0) <= GitHubConversationPlan.maximumPullRequests
+                      && (source.conversations?.allSatisfy { id, conversation in
+                          !id.isEmpty && id.utf8.count <= 256 && !conversation.repositoryID.isEmpty
+                              && conversation.repositoryID.utf8.count <= 256 && conversation.number > 0
+                              && conversation.fingerprint.count == 64 && conversation.commentIDs.count <= 3000
+                              && Set(conversation.commentIDs).count == conversation.commentIDs.count
+                              && conversation.commentIDs.allSatisfy { !$0.isEmpty && $0.utf8.count <= 256 }
+                      } ?? true)
+                      && [source.authored, source.requested].allSatisfy { section in
                       section?.allSatisfy { id, pr in
                           !id.isEmpty && id.utf8.count <= 256 && !pr.repositoryID.isEmpty
                               && pr.repositoryID.utf8.count <= 256 && pr.number > 0
