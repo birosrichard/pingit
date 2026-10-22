@@ -170,10 +170,47 @@ struct NotificationPermissionTests {
         await first.value
         #expect(f.coordinator.permission == .denied)
     }
+
+    @Test func explicitRequestUsesItsPermissionResultDuringOverlappingRefresh() async {
+        let f = NotificationFixture()
+        f.service.holdStatus = true
+        let request = Task { await f.coordinator.requestPermission() }
+        await f.wait { f.service.statuses.count == 1 }
+        let uiRefresh = Task { await f.coordinator.refreshAuthorization() }
+        await f.wait { f.service.statuses.count == 2 }
+        let requestRead = f.service.statuses.removeFirst()
+        requestRead.resume(returning: .notDetermined)
+        await f.wait { !f.coordinator.isRequestingPermission || f.service.requestCalls == 1 }
+        f.service.releaseStatus(.authorized)
+        await request.value
+        await uiRefresh.value
+        #expect(f.service.requestCalls == 1)
+        #expect(f.coordinator.permission == .authorized)
+    }
 }
 
 @MainActor
 struct NotificationDeliveryTests {
+    @Test(arguments: [NotificationPermission.authorized, .denied])
+    func deliveryUsesItsPermissionResultDuringOverlappingRefresh(status: NotificationPermission) async throws {
+        let f = NotificationFixture()
+        f.preferences.enabled = true
+        if !status.allowsDelivery { await f.coordinator.refreshAuthorization() }
+        f.service.holdStatus = true
+        f.coordinator.consume([try f.event()])
+        await f.wait { f.service.statuses.count == 1 }
+        let uiRefresh = Task { await f.coordinator.refreshAuthorization() }
+        await f.wait { f.service.statuses.count == 2 }
+        let deliveryRead = f.service.statuses.removeFirst()
+        deliveryRead.resume(returning: status)
+        await f.finish()
+        let attemptsBeforeUIRefreshFinished = f.service.attempts.count
+        f.service.releaseStatus(status)
+        await uiRefresh.value
+        #expect(attemptsBeforeUIRefreshFinished == (status.allowsDelivery ? 1 : 0))
+        #expect(f.coordinator.permission == status)
+    }
+
     @Test func disabledMasterDoesNotQueryOrDeliver() async throws {
         let f = NotificationFixture()
         f.coordinator.consume([try f.event()])

@@ -80,10 +80,10 @@ final class NotificationCoordinator {
         }
         while !pending.isEmpty {
             guard generation == deliveryGeneration, !Task.isCancelled, preferences.enabled else { return }
-            await refreshAuthorization()
+            let status = await readAuthorization()
             guard generation == deliveryGeneration, !Task.isCancelled, preferences.enabled else { return }
             let message = pending.removeFirst()
-            guard permission.allowsDelivery else { continue }
+            guard status.allowsDelivery else { continue }
             do {
                 try await service.deliver(message)
                 guard generation == deliveryGeneration, !Task.isCancelled else { return }
@@ -116,12 +116,18 @@ final class NotificationCoordinator {
     }
 
     func refreshAuthorization() async {
-        guard !stopped else { return }
+        _ = await readAuthorization()
+    }
+
+    private func readAuthorization() async -> NotificationPermission {
+        guard !stopped else { return .unavailable }
         permissionGeneration += 1
         let generation = permissionGeneration
         let status = await service.authorizationStatus()
-        guard !stopped, generation == permissionGeneration, !Task.isCancelled else { return }
-        permission = status
+        guard !stopped, !Task.isCancelled else { return .unavailable }
+        // A newer UI refresh must not discard the permission result needed by this caller.
+        if generation == permissionGeneration { permission = status }
+        return status
     }
 
     deinit { delivery?.cancel() }
@@ -132,8 +138,8 @@ final class NotificationCoordinator {
         isRequestingPermission = true
         errorMessage = nil
         defer { isRequestingPermission = false }
-        await refreshAuthorization()
-        guard !stopped, !Task.isCancelled, permission == .notDetermined else { return }
+        let status = await readAuthorization()
+        guard !stopped, !Task.isCancelled, status == .notDetermined else { return }
         do { try await service.requestAuthorization() }
         catch {
             guard !stopped, !Task.isCancelled else { return }
