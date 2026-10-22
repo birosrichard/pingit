@@ -116,6 +116,9 @@ extension NotificationMessage {
         identifier = "pingit.change.\(changeDigest(event.id))"
         threadIdentifier = "pingit.pr.\(changeDigest(event.pullRequestID))"
         title = switch event.kind {
+        case .prMerged: "Pull request merged"
+        case .prClosed: "Pull request closed"
+        case .prReopened: "Pull request reopened"
         case .reviewRequested: "Review requested"
         case .reviewRequestRemoved: "Review request removed"
         case .approved: "Pull request approved"
@@ -129,7 +132,14 @@ extension NotificationMessage {
         let prTitle = Self.text(event.title, limit: 180)
         let actor = Self.text(event.actorLogin, limit: 80)
         let context = prTitle.isEmpty ? "Pull request #\(event.number)" : prTitle
-        if event.signal == .conversation {
+        if event.signal == .lifecycle {
+            switch event.kind {
+            case .prMerged: body = "Your PR #\(event.number) was merged."
+            case .prClosed: body = "Your PR #\(event.number) was closed without merging."
+            case .prReopened: body = "Your PR #\(event.number) was reopened."
+            default: return nil
+            }
+        } else if event.signal == .conversation {
             let who = actor.isEmpty ? "Someone" : "@\(actor)"
             body = event.kind == .newReviewThreadReply
                 ? "\(who) replied to a discussion on #\(event.number)."

@@ -57,6 +57,7 @@ actor PullRequestChangeDetector {
                 }
             }
             let commentEvents = ConversationChangeTracking.project(old: old, next: &next, input: input)
+            let lifecycleEvents = LifecycleChangeTracking.project(old: old, next: &next, input: input)
             guard next != old || baseline != next else {
                 lastSequence = input.sequence
                 return Output()
@@ -73,7 +74,7 @@ actor PullRequestChangeDetector {
                 })
                 return !Set(event.relatedReviewIDs).isSubset(of: covered)
             }
-            let events = reviewEvents + commentEvents
+            let events = reviewEvents + commentEvents + lifecycleEvents
             try Task.checkCancellation()
             try store.save(next)
             baseline = next
@@ -89,6 +90,14 @@ actor PullRequestChangeDetector {
         guard generation >= self.generation, !Task.isCancelled else { return .init() }
         do { try load() } catch { return .init() }
         return ConversationChangeTracking.plan(source: baseline?.sources[scopeID], sections: sections, at: at)
+    }
+
+    func lifecyclePlan(_ input: PullRequestChangeInput, generation: UInt64) -> GitHubLifecyclePlan {
+        guard generation >= self.generation, !Task.isCancelled,
+              Set(input.scopes.map(\.identity)).count == 1, let identity = input.scopes.first?.identity else { return .init() }
+        do { try load() } catch { return .init(limited: true) }
+        let snapshot = reconciled(baseline ?? .init(identity: identity), scopes: input.scopes)
+        return LifecycleChangeTracking.plan(snapshot: snapshot, input: input)
     }
 
     private func load() throws {
@@ -110,6 +119,7 @@ actor PullRequestChangeDetector {
         next.rebasingRepositories = active.isEmpty ? [] : Set(old.rebasingRepositories + affected).sorted()
         next.sources = old.sources.filter { active.contains($0.key) }
         ConversationChangeTracking.reconcile(&next, scopes: Array(active))
+        LifecycleChangeTracking.reconcile(&next, scopes: Array(active))
         return next
     }
 

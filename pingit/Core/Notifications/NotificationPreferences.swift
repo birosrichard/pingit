@@ -13,6 +13,9 @@ final class NotificationPreferences {
     var newPRComments: Bool { didSet { save(newPRComments, key: "newPRComments", previous: oldValue) } }
     var reviewThreadReplies: Bool { didSet { save(reviewThreadReplies, key: "reviewThreadReplies", previous: oldValue) } }
     var botComments: Bool { didSet { save(botComments, key: "botComments", previous: oldValue) } }
+    var prMerged: Bool { didSet { save(prMerged, key: "prMerged", previous: oldValue) } }
+    var prClosed: Bool { didSet { save(prClosed, key: "prClosed", previous: oldValue) } }
+    var prReopened: Bool { didSet { save(prReopened, key: "prReopened", previous: oldValue) } }
     var sound: Bool { didSet { save(sound, key: "sound", previous: oldValue) } }
 
     @ObservationIgnored private let defaults: UserDefaults?
@@ -29,12 +32,18 @@ final class NotificationPreferences {
         newPRComments = defaults?.object(forKey: "notifications.newPRComments") as? Bool ?? true
         reviewThreadReplies = defaults?.object(forKey: "notifications.reviewThreadReplies") as? Bool ?? true
         botComments = defaults?.object(forKey: "notifications.botComments") as? Bool ?? false
+        prMerged = defaults?.object(forKey: "notifications.prMerged") as? Bool ?? true
+        prClosed = defaults?.object(forKey: "notifications.prClosed") as? Bool ?? false
+        prReopened = defaults?.object(forKey: "notifications.prReopened") as? Bool ?? false
         sound = defaults?.object(forKey: "notifications.sound") as? Bool ?? false
     }
 
     func allows(_ kind: PullRequestChangeEvent.Kind) -> Bool {
         guard enabled else { return false }
         switch kind {
+        case .prMerged: return prMerged
+        case .prClosed: return prClosed
+        case .prReopened: return prReopened
         case .reviewRequested: return reviewRequested
         case .reviewRequestRemoved: return reviewRequestRemoved
         case .approved: return approved
