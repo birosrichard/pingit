@@ -51,8 +51,14 @@ final class NotificationCoordinator {
 
     func consume(_ events: [PullRequestChangeEvent]) {
         guard !stopped, preferences.enabled else { return }
+        let reviewIDs = Set(events.filter {
+            ($0.kind == .approved || $0.kind == .changesRequested) && preferences.allows($0.kind)
+                && NotificationMessage(event: $0, sound: preferences.sound) != nil
+        }.flatMap(\.relatedReviewIDs))
         for event in events {
             guard preferences.allows(event.kind),
+                  !event.actorIsBot || preferences.botComments,
+                  event.kind != .newInlineReviewComment || reviewIDs.isDisjoint(with: event.relatedReviewIDs),
                   let message = NotificationMessage(event: event, sound: preferences.sound),
                   seen.insert(message.identifier).inserted else { continue }
             seenOrder.append(message.identifier)

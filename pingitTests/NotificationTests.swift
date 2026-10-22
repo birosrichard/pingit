@@ -228,6 +228,8 @@ struct NotificationDeliveryTests {
         case .approved: f.preferences.approved = false
         case .changesRequested: f.preferences.changesRequested = false
         case .readyForReview: f.preferences.readyForReview = false
+        case .newPRComment, .newInlineReviewComment: f.preferences.newPRComments = false
+        case .newReviewThreadReply: f.preferences.reviewThreadReplies = false
         }
         f.coordinator.consume([try f.event(kind)])
         await f.finish()
@@ -292,6 +294,9 @@ struct NotificationDeliveryTests {
         case .approved: expected = "Pull request approved"
         case .changesRequested: expected = "Changes requested"
         case .readyForReview: expected = "Ready for review"
+        case .newPRComment: expected = "New PR comment"
+        case .newInlineReviewComment: expected = "New inline review comment"
+        case .newReviewThreadReply: expected = "Reply in review thread"
         }
         #expect(message.title == expected)
         #expect(message.subtitle == "owner/repository #1")

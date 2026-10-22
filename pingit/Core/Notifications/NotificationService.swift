@@ -76,14 +76,24 @@ enum GitHubNotificationURL {
         guard string.utf8.count <= 2048, let parts = URLComponents(string: string),
               parts.scheme == "https", parts.host == "github.com",
               parts.user == nil, parts.password == nil, parts.port == nil,
-              parts.query == nil, parts.fragment == nil,
+              parts.query == nil,
               parts.percentEncodedPath == parts.path else { return nil }
         let path = parts.path.split(separator: "/", omittingEmptySubsequences: false)
-        guard path.count == 5, path[0].isEmpty,
+        guard (path.count == 5 || path.count == 6), path[0].isEmpty,
               validComponent(path[1], repository: false), validComponent(path[2], repository: true),
               path[3] == "pull", let number = Int(path[4]), number > 0,
               path[4] == Substring(String(number)),
-              string == "https://github.com/\(path[1])/\(path[2])/pull/\(number)" else { return nil }
+              path.count == 5 || path[5] == "files" else { return nil }
+        let suffix = path.count == 6 ? "/files" : ""
+        let fragment = parts.fragment.map { "#" + $0 } ?? ""
+        if let anchor = parts.fragment {
+            let prefix = anchor.hasPrefix("issuecomment-") ? "issuecomment-" : "discussion_r"
+            let digits = anchor.dropFirst(prefix.count)
+            guard anchor.hasPrefix(prefix), !digits.isEmpty, digits.first != "0",
+                  digits.utf8.allSatisfy({ (48...57).contains($0) }),
+                  suffix.isEmpty || prefix == "discussion_r" else { return nil }
+        } else if !suffix.isEmpty { return nil }
+        guard string == "https://github.com/\(path[1])/\(path[2])/pull/\(number)" + suffix + fragment else { return nil }
         return parts.url
     }
 
@@ -100,7 +110,9 @@ extension NotificationMessage {
     init?(event: PullRequestChangeEvent, sound: Bool) {
         guard !event.id.isEmpty, !event.pullRequestID.isEmpty, event.number > 0,
               let url = GitHubNotificationURL.validate(event.url.absoluteString),
-              url.path == "/\(event.repository.nameWithOwner)/pull/\(event.number)" else { return nil }
+              url.path == "/\(event.repository.nameWithOwner)/pull/\(event.number)"
+                || (event.signal == .conversation && url.path == "/\(event.repository.nameWithOwner)/pull/\(event.number)/files"),
+              event.signal != .conversation || url.fragment != nil else { return nil }
         identifier = "pingit.change.\(changeDigest(event.id))"
         threadIdentifier = "pingit.pr.\(changeDigest(event.pullRequestID))"
         title = switch event.kind {
@@ -109,12 +121,20 @@ extension NotificationMessage {
         case .approved: "Pull request approved"
         case .changesRequested: "Changes requested"
         case .readyForReview: "Ready for review"
+        case .newPRComment: "New PR comment"
+        case .newInlineReviewComment: "New inline review comment"
+        case .newReviewThreadReply: "Reply in review thread"
         }
         subtitle = "\(event.repository.nameWithOwner) #\(event.number)"
         let prTitle = Self.text(event.title, limit: 180)
         let actor = Self.text(event.actorLogin, limit: 80)
         let context = prTitle.isEmpty ? "Pull request #\(event.number)" : prTitle
-        body = actor.isEmpty ? context : "\(context) — @\(actor)"
+        if event.signal == .conversation {
+            let who = actor.isEmpty ? "Someone" : "@\(actor)"
+            body = event.kind == .newReviewThreadReply
+                ? "\(who) replied to a discussion on #\(event.number)."
+                : "\(who) commented on #\(event.number)."
+        } else { body = actor.isEmpty ? context : "\(context) — @\(actor)" }
         pullRequestURL = url.absoluteString
         self.sound = sound
     }

@@ -26,7 +26,7 @@ struct MenuBarView: View {
     private var errors: [String] {
         [connection.errorMessage,
          dashboard.reviews.errorMessage.map { "Review: \($0)" },
-         dashboard.authored.errorMessage.map { "My PRs and drafts: \($0)" }].compactMap { $0 }
+         dashboard.authored.errorMessage.map { "My PRs and drafts: \($0)" }].compactMap { $0 } + Array(Set(dashboard.sources.values.compactMap(\.conversationWarning))).sorted()
     }
 
     private var coverage: DiscoveryCoveragePresentation {
