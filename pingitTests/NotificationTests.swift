@@ -227,6 +227,9 @@ struct NotificationDeliveryTests {
         case .reviewRequestRemoved: f.preferences.reviewRequestRemoved = false
         case .approved: f.preferences.approved = false
         case .changesRequested: f.preferences.changesRequested = false
+        case .prMerged: f.preferences.prMerged = false
+        case .prClosed: f.preferences.prClosed = false
+        case .prReopened: f.preferences.prReopened = false
         case .readyForReview: f.preferences.readyForReview = false
         case .newPRComment, .newInlineReviewComment: f.preferences.newPRComments = false
         case .newReviewThreadReply: f.preferences.reviewThreadReplies = false
@@ -293,6 +296,9 @@ struct NotificationDeliveryTests {
         case .reviewRequestRemoved: expected = "Review request removed"
         case .approved: expected = "Pull request approved"
         case .changesRequested: expected = "Changes requested"
+        case .prMerged: expected = "Pull request merged"
+        case .prClosed: expected = "Pull request closed"
+        case .prReopened: expected = "Pull request reopened"
         case .readyForReview: expected = "Ready for review"
         case .newPRComment: expected = "New PR comment"
         case .newInlineReviewComment: expected = "New inline review comment"
@@ -679,5 +685,63 @@ struct ConversationNotificationTests {
         f.coordinator.consume([approval, try event(.newReviewThreadReply, reviewIDs: ["REVIEW_1"])])
         await f.finish()
         #expect(f.service.delivered.count == 2)
+    }
+}
+
+@MainActor
+struct LifecycleNotificationTests {
+    private func event(_ kind: PullRequestChangeEvent.Kind) throws -> PullRequestChangeEvent {
+        let url = try #require(URL(string: "https://github.com/owner/repository/pull/1"))
+        let repositoryURL = try #require(URL(string: "https://github.com/owner/repository"))
+        return .init(id: "lifecycle-\(kind.rawValue)", kind: kind, pullRequestID: "PR_1",
+            repository: .init(id: "R_1", nameWithOwner: "owner/repository", url: repositoryURL),
+            number: 1, title: nil, url: url, observedAt: Date(), actorLogin: nil, signal: .lifecycle,
+            previousState: "OPEN", currentState: "MERGED", sourceIDs: ["scope"])
+    }
+
+    @Test func lifecycleDefaultsAndPersistence() throws {
+        let name = "pingit.lifecycle.notifications.tests.\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: name))
+        defer { defaults.removePersistentDomain(forName: name) }
+        let preferences = NotificationPreferences(defaults: defaults)
+        #expect(!preferences.enabled && preferences.prMerged && !preferences.prClosed && !preferences.prReopened)
+        #expect(!preferences.allows(.prMerged))
+        preferences.enabled = true
+        #expect(preferences.allows(.prMerged) && !preferences.allows(.prClosed) && !preferences.allows(.prReopened))
+        preferences.prMerged = false; preferences.prClosed = true; preferences.prReopened = true
+        let restored = NotificationPreferences(defaults: defaults)
+        #expect(!restored.prMerged && restored.prClosed && restored.prReopened)
+    }
+
+    @Test(arguments: [PullRequestChangeEvent.Kind.prMerged, .prClosed, .prReopened])
+    func conciseContentAndSafeActivation(kind: PullRequestChangeEvent.Kind) throws {
+        let change = try event(kind)
+        let message = try #require(NotificationMessage(event: change, sound: false))
+        let action = kind == .prMerged ? "merged" : kind == .prClosed ? "closed without merging" : "reopened"
+        #expect(message.body == "Your PR #1 was \(action).")
+        #expect(message.subtitle == "owner/repository #1")
+        var opened: [URL] = []
+        let activation = NotificationActivation(openURL: { opened.append($0); return true })
+        #expect(activation.activate(message.pullRequestURL))
+        #expect(opened == [change.url])
+    }
+
+    @Test(arguments: [PullRequestChangeEvent.Kind.prMerged, .prClosed, .prReopened])
+    func disabledTypesAndDuplicateDeliveryFailureAreConsumed(kind: PullRequestChangeEvent.Kind) async throws {
+        let f = NotificationFixture(), change = try event(kind)
+        f.preferences.enabled = true
+        f.preferences.prMerged = false
+        f.coordinator.consume([change])
+        await f.finish()
+        #expect(f.service.attempts.isEmpty)
+        f.preferences.prMerged = true; f.preferences.prClosed = true; f.preferences.prReopened = true
+        f.service.deliveryFails = true
+        f.coordinator.consume([change, change])
+        await f.finish()
+        #expect(f.service.attempts.count == 1 && f.coordinator.errorMessage != nil)
+        f.service.deliveryFails = false
+        f.coordinator.consume([change])
+        await f.finish()
+        #expect(f.service.attempts.count == 1)
     }
 }

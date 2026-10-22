@@ -2,7 +2,7 @@ name: macOS CI
 
 on:
   pull_request:
-    branches: [main]
+    branches: [main, feat/pr-comment-tracking]
   workflow_dispatch:
 
 permissions:

@@ -65,7 +65,7 @@ struct ConversationDetectionTests {
         let restarted = PullRequestChangeDetector(store: f.memory.store)
         #expect(await restarted.process(f.input(2, comments: [f.comment(time: 10)]), generation: 1).events.isEmpty)
         #expect(await restarted.process(f.input(2, comments: [f.comment(time: 10)]), generation: 1).events.isEmpty)
-        #expect(try f.memory.store.load()?.version == 2)
+        #expect(try f.memory.store.load()?.version == PullRequestChangeSnapshot.schemaVersion)
     }
 
     @Test(arguments: [PullRequestChangeEvent.Kind.newPRComment, .newInlineReviewComment, .newReviewThreadReply])
@@ -160,7 +160,7 @@ struct ConversationDetectionTests {
         object["sources"] = sources
         f.memory.data = try JSONSerialization.data(withJSONObject: object)
         let migrated = try #require(try f.memory.store.load())
-        #expect(migrated.version == 2 && migrated.epoch == prior.epoch && migrated.revision == prior.revision)
+        #expect(migrated.version == PullRequestChangeSnapshot.schemaVersion && migrated.epoch == prior.epoch && migrated.revision == prior.revision)
         #expect(migrated.sources[f.scope.id]?.authored == prior.sources[f.scope.id]?.authored)
         let restarted = PullRequestChangeDetector(store: f.memory.store)
         let output = await restarted.process(f.input(2, comments: [f.comment()], decision: .approved), generation: 1)
