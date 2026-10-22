@@ -136,8 +136,21 @@ and Phase 6A tests remain in the shared scheme. macOS CI retains Xcode 26.3,
 Swift 6, complete concurrency and warnings as errors. Its existing PR base filter
 also includes `feat/pr-comment-tracking` for this stacked Draft PR.
 
-macOS build/test results will be recorded after the first CI run. Native banner
-delivery and development-signed runtime behavior have not been manually verified.
+macOS CI passed at implementation commit `a5ed4442d71db491df17771c78589b22d65bb31f`:
+[macOS CI run 39739443655](https://github.com/birosrichard/pingit/actions/runs/39739443655).
+The application built and **339 tests across 34 suites passed**, including the
+existing Phase 5B and Phase 6A suites. The runner used macOS 15 arm64, Xcode 26.3
+(build 17C529), and the Swift 6.2.4 compiler in Swift 6 language mode. Logs confirm
+`SWIFT_STRICT_CONCURRENCY=complete`, Swift warnings as errors, and C-family warnings
+as errors. The only tool warnings were the existing AppIntents metadata-extraction
+notices; no Swift compiler warnings were accepted. Earlier runs found test-fixture
+name shadowing and overlapping dictionary access; both were corrected on this branch
+without weakening compiler settings or test assertions.
+
+This documentation-only follow-up records the passing implementation run; the PR
+checks show validation for the latest head. Linux static checks and workflow YAML
+validation also pass. Native banner delivery and development-signed runtime behavior
+have not been manually verified.
 
 ## Known limitations and manual acceptance
 
