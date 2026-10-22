@@ -76,7 +76,7 @@ enum PullRequestAttention: Equatable, Sendable {
         case .workInProgress:
             "Your pull request is a draft; it is not an active review request."
         case .unknown(.previous):
-            "Previous snapshot. Refresh is pending, in progress, or failed; the next action is unverified."
+            "Some discovery data is previous or unverified. Refresh is pending, in progress, or failed; the next action is unverified."
         case .unknown(.incomplete):
             "Discovery is incomplete. The next action cannot be determined reliably."
         case .unknown(.conflicting):
@@ -86,7 +86,10 @@ enum PullRequestAttention: Equatable, Sendable {
         }
     }
 
-    var accessibilityLabel: String { "\(label). \(explanation)" }
+    var accessibilityLabel: String {
+        if let reason { return "\(label). \(reason.accessibilityLabel)" }
+        return "\(label). \(explanation)"
+    }
 }
 
 enum PullRequestAttentionReason: String, CaseIterable, Identifiable, Sendable {
