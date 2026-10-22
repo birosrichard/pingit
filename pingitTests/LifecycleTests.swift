@@ -249,7 +249,8 @@ struct LifecycleDetectionTests {
         _ = await d.process(input, generation: 1)
         var snapshot = try #require(try f.memory.store.load())
         #expect(snapshot.lifecycles?.count == 100)
-        snapshot.lifecycles?["overflow"] = snapshot.lifecycles?.values.first
+        let overflow = try #require(snapshot.lifecycles?.values.first)
+        snapshot.lifecycles?["overflow"] = overflow
         #expect(throws: PullRequestSnapshotStore.Failure.self) { try f.memory.store.save(snapshot) }
     }
 }
