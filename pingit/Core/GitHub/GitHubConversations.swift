@@ -54,6 +54,7 @@ extension PullRequestChangeSnapshot {
         var commentIDs: [String]
         var comparable: Bool
         var lastRequestedAt: Date?
+        var reviewCommentIDs: [String]? = nil
     }
 }
 

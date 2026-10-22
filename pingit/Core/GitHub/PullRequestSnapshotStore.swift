@@ -69,6 +69,8 @@ struct PullRequestSnapshotStore: Sendable {
                           !id.isEmpty && id.utf8.count <= 256 && !conversation.repositoryID.isEmpty
                               && conversation.repositoryID.utf8.count <= 256 && conversation.number > 0
                               && conversation.fingerprint.count == 64 && conversation.commentIDs.count <= 3000
+                              && (conversation.reviewCommentIDs?.count ?? 0) <= 3000
+                              && (conversation.reviewCommentIDs?.allSatisfy { !$0.isEmpty && $0.utf8.count <= 256 } ?? true)
                               && Set(conversation.commentIDs).count == conversation.commentIDs.count
                               && conversation.commentIDs.allSatisfy { !$0.isEmpty && $0.utf8.count <= 256 }
                       } ?? true)

@@ -63,7 +63,17 @@ actor PullRequestChangeDetector {
             }
             guard old.revision < UInt64.max else { return Output(storageFailed: true) }
             next.revision = old.revision + 1
-            let events = detect(old: old, next: next, input: input) + commentEvents
+            // A later search response must not notify again for a submitted review whose
+            // relevant inline comments were already consumed in an earlier committed flight.
+            let reviewEvents = detect(old: old, next: next, input: input).filter { event in
+                guard event.kind == .approved || event.kind == .changesRequested,
+                      !event.relatedReviewIDs.isEmpty else { return true }
+                let covered = Set(old.sources.values.flatMap {
+                    $0.conversations?[event.pullRequestID]?.reviewCommentIDs ?? []
+                })
+                return !Set(event.relatedReviewIDs).isSubset(of: covered)
+            }
+            let events = reviewEvents + commentEvents
             try Task.checkCancellation()
             try store.save(next)
             baseline = next
@@ -211,7 +221,7 @@ actor PullRequestChangeDetector {
                        before: previous.decision!.rawValue, after: current.decision!.rawValue,
                        reviewIDs: (current.reviewers?.values.filter { review in
                            !(previous.reviewers?.values.contains { $0.id == review.id } ?? false)
-                               && (review.state == .approved || review.state == .changesRequested)
+                               && (overallKind == .approved ? review.state == .approved : review.state == .changesRequested)
                        }.map(\.id)) ?? [])
             }
             guard before.values.allSatisfy({ $0.reviewsComplete && $0.reviewers == previous.reviewers }),

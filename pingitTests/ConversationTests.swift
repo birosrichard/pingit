@@ -24,11 +24,11 @@ private struct ConversationFixture {
     var scope: PullRequestChangeScope { .init(row)! }
     let repository = GitHubRepository(id: "R_1", nameWithOwner: "owner/private",
         url: URL(string: "https://github.com/owner/private")!)
-    func pr(decision: GitHubReviewStatus = .reviewRequired, time: Double = 1) -> GitHubPullRequest {
+    func pr(decision: GitHubReviewStatus = .reviewRequired, time: Double = 1, reviews: [GitHubPullRequestReview] = []) -> GitHubPullRequest {
         .init(id: "PR_1", number: 1, title: "Secret title", url: URL(string: "https://github.com/owner/private/pull/1")!,
               repository: repository, authorLogin: "octocat", isDraft: false, createdAt: .distantPast,
               updatedAt: Date(timeIntervalSince1970: time), reviewStatus: decision,
-              latestReviews: .init(reviews: [], limitations: []), reviewRequests: [])
+              latestReviews: .init(reviews: reviews, limitations: []), reviewRequests: [])
     }
     func comment(_ id: String = "C1", kind: PullRequestChangeEvent.Kind = .newPRComment,
                  time: Double = 150, relevant: Bool = true, bot: Bool = false) -> GitHubConversationComment {
@@ -38,10 +38,11 @@ private struct ConversationFixture {
     }
     func input(_ sequence: UInt64, comments: [GitHubConversationComment]? = [],
                rows: [GitHubTokenConnection]? = nil, failed: Set<String> = [], truncated: Bool = false,
-               decision: GitHubReviewStatus = .reviewRequired, requested: Bool = false) -> PullRequestChangeInput {
+               decision: GitHubReviewStatus = .reviewRequired, requested: Bool = false,
+               reviews: [GitHubPullRequestReview] = []) -> PullRequestChangeInput {
         let scopes = (rows ?? [row]).compactMap(PullRequestChangeScope.init)
         let time = Date(timeIntervalSince1970: Double(sequence) * 100)
-        let result = GitHubPullRequestDiscoveryResult(pullRequests: [pr(decision: decision, time: Double(sequence))],
+        let result = GitHubPullRequestDiscoveryResult(pullRequests: [pr(decision: decision, time: Double(sequence), reviews: reviews)],
             truncationReasons: truncated ? [.pageLimit] : [], coverageLimitations: [])
         let empty = GitHubPullRequestDiscoveryResult(pullRequests: [], truncationReasons: [], coverageLimitations: [])
         return .init(sequence: sequence, scopes: scopes, results: Dictionary(uniqueKeysWithValues: scopes.compactMap { scope in
@@ -165,9 +166,21 @@ struct ConversationDetectionTests {
         let output = await restarted.process(f.input(2, comments: [f.comment()], decision: .approved), generation: 1)
         #expect(output.events.map(\.kind) == [.approved])
         let text = String(decoding: try #require(f.memory.data), as: UTF8.self)
-        for privateValue in ["Secret title", "owner/private", "reviewer", "https://", "body", "test-token"] {
+        for privateValue in ["Secret title", "owner/private", "\"reviewer\"", "https://", "body", "test-token"] {
             #expect(!text.contains(privateValue))
         }
+    }
+
+    @Test func delayedReviewDecisionDoesNotRepeatEarlierInlineNotificationAfterRestart() async {
+        let f = ConversationFixture(), d = PullRequestChangeDetector(store: f.memory.store)
+        _ = await d.process(f.input(1), generation: 1)
+        let inline = GitHubConversationComment(id: "inline", kind: .newInlineReviewComment,
+            publishedAt: Date(timeIntervalSince1970: 150), url: URL(string: "https://github.com/owner/private/pull/1#discussion_r1")!,
+            actorLogin: "reviewer", isBot: false, relevant: true, reviewID: "REVIEW_1", threadID: "THREAD_1")
+        #expect(await d.process(f.input(2, comments: [inline]), generation: 1).events.map(\.kind) == [.newInlineReviewComment])
+        let restarted = PullRequestChangeDetector(store: f.memory.store)
+        let review = GitHubPullRequestReview(id: "REVIEW_1", authorLogin: "reviewer", state: .approved)
+        #expect(await restarted.process(f.input(3, comments: [inline], decision: .approved, reviews: [review]), generation: 1).events.isEmpty)
     }
 
     @Test func retainedRequestsAreBoundedAndExpire() async throws {
@@ -213,7 +226,7 @@ private enum ConversationHTTPFixture {
         return result
     }
     static func response(comments: [[String: Any]] = [], threads: [[[String: Any]]] = [],
-                         truncated: Bool = false, remaining: Int = 5000, missing: Bool = false) throws -> Data {
+                         truncated: Bool = false, remaining: Int = 5000, missing: Bool = false, ids: [String] = ["PR_1"]) throws -> Data {
         func connection(_ nodes: [[String: Any]]) -> [String: Any] {
             ["totalCount": nodes.count, "nodes": nodes, "pageInfo": ["hasNextPage": truncated]]
         }
@@ -225,7 +238,11 @@ private enum ConversationHTTPFixture {
                 }]]
         return try JSONSerialization.data(withJSONObject: ["data": ["viewer": ["id": "actor-octocat", "databaseId": 1, "login": "octocat"],
             "rateLimit": ["remaining": remaining, "resetAt": "2030-01-01T00:00:00Z"],
-            "nodes": missing ? [NSNull()] : [node]]])
+            "nodes": missing ? [NSNull()] : ids.map { id in
+                var value = node
+                value["id"] = id
+                return value
+            }]] )
     }
     static func http(_ data: Data, requests: ConversationRequests = ConversationRequests()) -> MockHTTP {
         MockHTTP { request in
@@ -296,6 +313,28 @@ struct ConversationDiscoveryTests {
         let http = ConversationHTTPFixture.http(try ConversationHTTPFixture.response(remaining: 0), requests: calls)
         let output = await GitHubConversationDiscovery(client: http.client).fetch(plan: ConversationHTTPFixture.plan(), account: account, token: "test-token")
         #expect(output.observations.isEmpty && output.error?.retryDeadline != nil && calls.count == 1)
+    }
+    @Test func interruptionKeepsCompleteBatchesWithoutClaimingUnfetchedCoverage() async throws {
+        let calls = ConversationRequests()
+        let ids = (1...6).map { "PR_\($0)" }
+        let five = Array(ids.prefix(5))
+        let probe = try ConversationHTTPFixture.response(ids: five)
+        let detail = try ConversationHTTPFixture.response(remaining: 0, ids: five)
+        let http = MockHTTP { request in
+            calls.record()
+            return (HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!,
+                    calls.count == 1 ? probe : detail)
+        }
+        let plan = GitHubConversationPlan(targets: ids.map { .init(id: $0, authored: true, lastRequestedAt: nil, fingerprint: nil) })
+        let result = await GitHubConversationDiscovery(client: http.client).fetch(plan: plan, account: account, token: "test-token")
+        #expect(calls.count == 2 && result.observations.count == 5 && result.attemptedIDs.count == 6)
+        #expect(result.error?.retryDeadline != nil && result.observations["PR_6"] == nil)
+    }
+    @Test func overLimitConnectionsHaveExplicitIncompleteCoverage() async throws {
+        let data = try ConversationHTTPFixture.response(comments: (1...51).map { ConversationHTTPFixture.comment("C\($0)") })
+        let calls = ConversationRequests(), http = ConversationHTTPFixture.http(data, requests: calls)
+        let result = await GitHubConversationDiscovery(client: http.client).fetch(plan: ConversationHTTPFixture.plan(), account: account, token: "test-token")
+        #expect(result.observations.isEmpty && result.limited && calls.count == 1)
     }
     @Test func secondaryLimitIsIsolatedFromOtherTokens() async throws {
         let http = MockHTTP(status: 429, body: "{}", headers: ["Retry-After": "60"])

@@ -69,10 +69,14 @@ enum ConversationChangeTracking {
                     }
                     let comments = observation.comments ?? []
                     let ids = Set(prior?.commentIDs ?? []).union(comments.map(\.id))
-                    guard ids.count <= 3000 else { continue }
+                    let reviewIDs = Set(prior?.reviewCommentIDs ?? []).union(comments.filter {
+                        $0.kind == .newInlineReviewComment && $0.relevant
+                    }.compactMap(\.reviewID))
+                    guard ids.count <= 3000, reviewIDs.count <= 3000 else { continue }
                     values[id] = .init(repositoryID: observation.repository.id, number: observation.number,
                         fingerprint: observation.fingerprint, verifiedAt: observation.verifiedAt,
-                        commentIDs: ids.sorted(), comparable: true, lastRequestedAt: observation.lastRequestedAt)
+                        commentIDs: ids.sorted(), comparable: true, lastRequestedAt: observation.lastRequestedAt,
+                        reviewCommentIDs: reviewIDs.isEmpty ? nil : reviewIDs.sorted())
                 }
             }
             source.conversations = values.isEmpty && source.conversations == nil ? nil : values
