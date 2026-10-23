@@ -33,7 +33,8 @@ xcodebuild -exportArchive -archivePath "$run_dir/pingit.xcarchive" \
 
 app="$run_dir/export/pingit.app"
 bash scripts/validate-app.sh "$app"
-lipo -verify_arch arm64 x86_64 "$app/Contents/MacOS/pingit"
+lipo "$app/Contents/MacOS/pingit" -verify_arch arm64
+lipo "$app/Contents/MacOS/pingit" -verify_arch x86_64
 codesign -d --entitlements :- "$app" > "$run_dir/entitlements.plist" 2>/dev/null
 codesign -dvvv "$app" 2> "$run_dir/signature.txt"
 security cms -D -i "$app/Contents/embedded.provisionprofile" > "$run_dir/profile.plist"
