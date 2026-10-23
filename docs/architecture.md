@@ -251,3 +251,11 @@ before calling the same notification consumer. Version-1 migration preserves rev
 history. Relevance uses actor identity, participation and conservative mention checks;
 notification toggles and canonical anchors use the existing coordinator/service.
 See [Phase 6A strategy, privacy, rate costs, limits and validation](phase-6a.md).
+
+## Attention interpretation
+
+Phase 7A applies a pure deterministic classification to normalized PRs and section
+coverage. The dashboard stably partitions actionable rows within existing inboxes;
+unknown/previous data never asserts action. Cached rows omitted by truncated
+refreshes are retained only for display; change detection still consumes raw
+results. See [attention semantics and acceptance](phase-7a.md).

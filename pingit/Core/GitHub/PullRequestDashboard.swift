@@ -7,6 +7,36 @@ struct PullRequestSectionState: Equatable {
     var result: GitHubPullRequestDiscoveryResult?
     var errorMessage: String?
     var updatedAt: Date?
+    // Ephemeral cache provenance; never persisted with private PR data.
+    var previousPullRequestIDs: Set<String> = []
+    var hasUnverifiedAttentionData = false
+
+    func attention(for pr: GitHubPullRequest, viewerLogin: String?) -> PullRequestAttention {
+        let coverage: PullRequestAttention.Coverage
+        if phase != .loaded || hasUnverifiedAttentionData || previousPullRequestIDs.contains(pr.id) {
+            coverage = .previous
+        } else if result?.coverageLimitations.contains(.conflictingMetadata) == true {
+            coverage = .conflicting
+        } else if result == nil || result?.isTruncated == true {
+            coverage = .incomplete
+        } else {
+            coverage = .current
+        }
+        return .classify(pr, viewerLogin: viewerLogin, coverage: coverage)
+    }
+
+    // A truncated response cannot prove that previously known PRs disappeared.
+    static func loaded(_ result: GitHubPullRequestDiscoveryResult, previous: Self?, at date: Date) -> Self {
+        let currentIDs = Set(result.pullRequests.map(\.id))
+        let retained = result.isTruncated
+            ? (previous?.result?.pullRequests ?? []).filter { !currentIDs.contains($0.id) } : []
+        let display = retained.isEmpty ? result : GitHubPullRequestDiscoveryResult(
+            pullRequests: GitHubPullRequestDiscoveryResult.merged([result, .init(
+                pullRequests: retained, truncationReasons: [], coverageLimitations: [])]).pullRequests,
+            truncationReasons: result.truncationReasons, coverageLimitations: result.coverageLimitations)
+        return Self(phase: .loaded, result: display, updatedAt: date,
+                    previousPullRequestIDs: Set(retained.map(\.id)))
+    }
 
     var coverageMessages: [String] {
         guard let result else { return [] }
@@ -302,6 +332,8 @@ final class PullRequestDashboard {
         flightResults = [:]
         var work: [(GitHubTokenConnection, String)] = []
         for row in eligible {
+            sources[row.id]?.authored.hasUnverifiedAttentionData = true
+            sources[row.id]?.reviews.hasUnverifiedAttentionData = true
             sources[row.id]?.authored.phase = .loading
             sources[row.id]?.authored.errorMessage = nil
             sources[row.id]?.reviews.phase = .loading
@@ -466,7 +498,8 @@ final class PullRequestDashboard {
             if isReview { flightResults[connection.storageAccount, default: .init()].requested = result }
             else { flightResults[connection.storageAccount, default: .init()].authored = result }
             lastSuccessfulRefreshAt = now()
-            let state = PullRequestSectionState(phase: .loaded, result: result, updatedAt: lastSuccessfulRefreshAt)
+            let previous = isReview ? sources[id]?.reviews : sources[id]?.authored
+            let state = PullRequestSectionState.loaded(result, previous: previous, at: now())
             if isReview { sources[id]?.reviews = state } else { sources[id]?.authored = state }
         } catch {
             guard self.session == session, !Task.isCancelled, let source = sources[id] else { return }
@@ -495,6 +528,8 @@ final class PullRequestDashboard {
             return (row.resourceOwner, review ? source.reviews : source.authored)
         }
         let states = entries.map(\.1)
+        let unverified = states.contains { $0.phase != .loaded || $0.hasUnverifiedAttentionData }
+            || connections.contains { $0.account == nil }
         let results = states.compactMap(\.result)
         let failures = entries.compactMap { label, state in state.errorMessage.map { "\(label): \($0)" } }
         let phase: PullRequestSectionState.Phase = states.contains { $0.phase == .loading } ? .loading
@@ -502,7 +537,9 @@ final class PullRequestDashboard {
         return PullRequestSectionState(phase: phase,
                                        result: results.isEmpty ? nil : .merged(results),
                                        errorMessage: failures.isEmpty ? nil : entries.count == 1 ? states.first?.errorMessage : failures.joined(separator: "\n"),
-                                       updatedAt: states.compactMap(\.updatedAt).min())
+                                       updatedAt: states.compactMap(\.updatedAt).min(),
+                                       previousPullRequestIDs: states.reduce(into: []) { $0.formUnion($1.previousPullRequestIDs) },
+                                       hasUnverifiedAttentionData: unverified)
     }
 
     deinit {
@@ -545,6 +582,18 @@ enum PullRequestInbox: String, CaseIterable, Identifiable {
         case .authored: return requests.filter { !$0.isDraft }
         case .drafts: return requests.filter(\.isDraft)
         }
+    }
+
+    func prioritizedPullRequests(in state: PullRequestSectionState, viewerLogin: String?) -> [GitHubPullRequest] {
+        // Stable partition: existing updated-at/node-ID ordering survives within each group.
+        let requests = pullRequests(in: state)
+        var actionable: [GitHubPullRequest] = []
+        var remaining: [GitHubPullRequest] = []
+        for pr in requests {
+            if state.attention(for: pr, viewerLogin: viewerLogin).reason != nil { actionable.append(pr) }
+            else { remaining.append(pr) }
+        }
+        return actionable + remaining
     }
 
     func label(in state: PullRequestSectionState) -> String {

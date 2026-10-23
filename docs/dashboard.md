@@ -1,3 +1,7 @@
+> Phase 7A adds conservative attention labels and stable within-tab prioritization.
+> See [current attention/count semantics and acceptance](phase-7a.md). The historical
+> validation notes below describe earlier builds, not Phase 7A runtime verification.
+
 > Phase 5A now refreshes this same in-memory dashboard from an app-owned scheduler,
 > even with the popover closed. Default: five minutes, configurable/disableable in
 > Settings. Opening keeps the 60-second freshness rule; manual/automatic requests

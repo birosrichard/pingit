@@ -22,7 +22,7 @@ struct MenuBarView: View {
     private var state: PullRequestSectionState {
         selection == .review ? dashboard.reviews : dashboard.authored
     }
-    private var pullRequests: [GitHubPullRequest] { selection.pullRequests(in: state) }
+    private var pullRequests: [GitHubPullRequest] { selection.prioritizedPullRequests(in: state, viewerLogin: dashboard.account?.login) }
     private var errors: [String] {
         [connection.errorMessage,
          dashboard.reviews.errorMessage.map { "Review: \($0)" },
@@ -142,7 +142,8 @@ struct MenuBarView: View {
                 ScrollView {
                     LazyVStack(spacing: 0) {
                         ForEach(pullRequests) { pr in
-                            PullRequestRow(presentation: .init(pr: pr, inbox: selection))
+                            PullRequestRow(presentation: .init(pr: pr, inbox: selection,
+                                attention: state.attention(for: pr, viewerLogin: dashboard.account?.login)))
                             if pr.id != pullRequests.last?.id {
                                 Divider()
                                     .padding(.leading, DashboardLayout.rowInset + DashboardLayout.avatarSize + DashboardLayout.avatarSpacing)
@@ -222,7 +223,9 @@ struct MenuBarView: View {
     }
 
     private var emptyState: some View {
-        let display = PullRequestEmptyPresentation(inbox: selection, phase: state.phase)
+        let display = PullRequestEmptyPresentation(inbox: selection, phase: state.phase,
+            isIncomplete: state.result?.isTruncated == true || state.hasUnverifiedAttentionData
+                || state.result?.coverageLimitations.contains(.conflictingMetadata) == true)
         return VStack(spacing: 8) {
             if display.isLoading {
                 ProgressView().controlSize(.small)

@@ -3,6 +3,7 @@ import Foundation
 // The default row intentionally projects only identity, review context and diff totals.
 // CI remains in the domain and transport for a future authentication strategy.
 struct PullRequestRowPresentation: Equatable {
+    let attention: PullRequestAttention?
     let title: String
     let repositoryLabel: String
     let updatedAt: Date
@@ -14,7 +15,8 @@ struct PullRequestRowPresentation: Equatable {
     let accessibilityLabel: String
     let help: String
 
-    init(pr: GitHubPullRequest, inbox: PullRequestInbox) {
+    init(pr: GitHubPullRequest, inbox: PullRequestInbox, attention: PullRequestAttention? = nil) {
+        self.attention = attention
         title = pr.title
         repositoryLabel = "\(pr.repository.nameWithOwner) #\(pr.number)"
         updatedAt = pr.updatedAt
@@ -40,9 +42,10 @@ struct PullRequestRowPresentation: Equatable {
         } else {
             detail = pr.reviewPresentation.detail
         }
+        let attentionDescription = attention.map { " \($0.accessibilityLabel)" } ?? ""
         let diffDescription = diff?.accessibilityLabel ?? "Diff statistics unavailable"
-        accessibilityLabel = "\(pr.isDraft ? "Draft pull request" : "Pull request") \(pr.number). \(title). \(repositoryLabel). \(context)\(detail) \(diffDescription)."
-        help = "\(title)\n\(repositoryLabel)\n\(detail)\n\(diffDescription)\n\(browserURL == nil ? "GitHub link unavailable" : "Open on GitHub")"
+        accessibilityLabel = "\(pr.isDraft ? "Draft pull request" : "Pull request") \(pr.number). \(title). \(repositoryLabel). \(context)\(detail) \(diffDescription).\(attentionDescription)"
+        help = "\(title)\n\(repositoryLabel)\n\(detail)\(attentionDescription)\n\(diffDescription)\n\(browserURL == nil ? "GitHub link unavailable" : "Open on GitHub")"
     }
 
     func compactUpdatedAge(relativeTo now: Date) -> String {
@@ -57,7 +60,7 @@ struct PullRequestEmptyPresentation: Equatable {
     let isLoading: Bool
     let isFailure: Bool
 
-    init(inbox: PullRequestInbox, phase: PullRequestSectionState.Phase) {
+    init(inbox: PullRequestInbox, phase: PullRequestSectionState.Phase, isIncomplete: Bool = false) {
         isLoading = phase == .idle || phase == .loading
         isFailure = phase == .failed
         if isLoading {
@@ -68,6 +71,10 @@ struct PullRequestEmptyPresentation: Equatable {
             title = "Couldn’t update this inbox"
             message = "Refresh to retry, or open update details below."
             systemImage = "exclamationmark.triangle"
+        } else if isIncomplete {
+            title = "Results are incomplete"
+            message = "No matching pull requests were returned. Other pull requests may be missing; refresh to retry."
+            systemImage = "questionmark.circle"
         } else {
             title = inbox == .review ? "All caught up" : inbox == .drafts ? "No drafts" : "No open pull requests"
             message = inbox == .review ? "No direct requests in the repositories visible to your tokens."
@@ -108,4 +115,11 @@ extension PullRequestInbox {
         case .drafts: "Work in progress"
         }
     }
+}
+
+// The menu bar has no numeric badge: it reports connection presence only.
+struct MenuBarIndicatorPresentation: Equatable {
+    let isConnected: Bool
+    var assetName: String { "MenuBarIcon" }
+    var accessibilityLabel: String { isConnected ? "pingit — Connected" : "pingit — Not connected" }
 }

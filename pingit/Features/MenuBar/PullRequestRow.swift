@@ -41,10 +41,21 @@ struct PullRequestRow: View {
                     .fixedSize()
                     .accessibilityHidden(true)
                 }
-                Text(presentation.repositoryLabel)
-                    .font(.callout).foregroundStyle(.secondary)
-                    .lineLimit(1).truncationMode(.middle)
-                    .help(presentation.repositoryLabel)
+                HStack(spacing: 8) {
+                    Text(presentation.repositoryLabel)
+                        .font(.callout).foregroundStyle(.secondary)
+                        .lineLimit(1).truncationMode(.middle)
+                        .help(presentation.repositoryLabel)
+                    Spacer(minLength: 0)
+                    if let attention = presentation.attention {
+                        Label(attention.label, systemImage: attention.systemImage)
+                            .font(.caption)
+                            .foregroundStyle(attention.reason == nil ? Color.secondary : Color.accentColor)
+                            .lineLimit(1)
+                            .fixedSize()
+                            .help(attention.accessibilityLabel)
+                    }
+                }
                 metadata.font(.callout)
                 if presentation.browserURL == nil {
                     Label("GitHub link unavailable", systemImage: "link")
@@ -112,7 +123,7 @@ struct PullRequestRow: View {
         case .neutral: .secondary
         case .positive: .green
         case .caution: .orange
-        case .negative: .red
+        case .negative: .secondary
         }
     }
 }
