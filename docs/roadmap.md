@@ -166,7 +166,9 @@ Keep each phase independently buildable and validate before moving on.
 
 ## 8. Distribution and release readiness
 
-- Prepare GitHub Releases, Homebrew, and Mac App Store distribution.
+- GitHub Releases and the upstream Homebrew tap now use the signed, notarized
+  universal-app [release workflow](distribution.md).
+- Mac App Store distribution remains planned.
 - Choose an open-source license; add release assets, signing/notarization,
   reproducible release checks, and required privacy/store metadata.
 - Acceptance: clean machines can install, launch, upgrade, and uninstall supported

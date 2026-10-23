@@ -2,8 +2,9 @@
 
 pingit uses a universal macOS app ZIP published in GitHub Releases and a cask in
 [`birosrichard/homebrew-tap`](https://github.com/birosrichard/homebrew-tap).
-The first public binary release is pending signing/notarization and install checks.
-Until that release is published, use the README's source build instructions.
+The first public binary release is
+[`v0.1.0`](https://github.com/birosrichard/pingit/releases/tag/v0.1.0), signed with
+Developer ID, notarized by Apple, and packaged for both Apple Silicon and Intel.
 
 ## Signing setup (once per signing Mac)
 
@@ -85,20 +86,40 @@ brew install --cask birosrichard/tap/pingit
 ```
 
 Verify an actual install, launch, and uninstall on a Mac without an existing
-`/Applications/pingit.app` before announcing availability. Homebrew checks:
+`/Applications/pingit.app` before announcing availability. During validation,
+set `HOMEBREW_NO_AUTOREMOVE=1` for uninstall commands and
+`HOMEBREW_NO_INSTALL_CLEANUP=1` for install commands so the test does not clean up
+unrelated packages. Homebrew checks for the upstream tap:
 
 ```sh
 brew style --cask birosrichard/tap/pingit
-brew audit --new --cask birosrichard/tap/pingit
+brew audit --new --cask --except github_repository birosrichard/tap/pingit
 ```
 
-After the first release is verified, replace the pending-release notice in the
-README with the install command. For updates, publish a new versioned asset and
-update the cask version/checksum; users can run `brew update` and
+For updates, publish a new versioned asset and update the cask version/checksum;
+users can run `brew update` and
 `brew upgrade --cask birosrichard/tap/pingit`. Uninstalling removes the app but
 does not revoke GitHub tokens. Users can remove tokens in Settings and revoke
 them on GitHub independently. No cask `zap` rule deletes user credentials.
 
 Listing in Homebrew's official collection is a separate contribution, subject to
 its [acceptance policy](https://docs.brew.sh/Acceptable-Casks). The upstream tap
-works without that approval.
+works without that approval. The full `brew audit --new` currently rejects this
+new repository on notability (fewer than 30 forks, 30 watchers, and 75 stars).
+The tap's technical audit excludes that official-collection check; this does not
+waive the requirement for a future contribution to Homebrew's official collection.
+
+## First release validation
+
+Validated on 2026-10-23 with Xcode 27.1 (27A9275), macOS 27.0.1, and Apple Silicon:
+
+- 358 app tests in 35 suites, plus four cask-generator tests, passed.
+- The Release executable contains both arm64 and x86_64 slices.
+- Apple accepted notarization; the stapled ticket and Gatekeeper checks passed.
+- The GitHub download matched the packaged ZIP byte for byte, including through
+  an anonymous public download.
+- The downloaded app and Homebrew-installed app passed startup smoke tests.
+- Homebrew install, uninstall, and reinstall succeeded.
+
+Intel execution, macOS 14 execution, live GitHub login/token restoration, and
+notification delivery were not checked in this release-validation session.

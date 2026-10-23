@@ -4,9 +4,24 @@ A native macOS menu bar app that keeps your GitHub pull requests and review requ
 
 Check reviews, follow your own PRs, and open a pull request on GitHub without leaving a browser tab open all day. Built with SwiftUI, with no external package dependencies or backend service.
 
-**Early development.** Build from source for now. The signed release and Homebrew
-packaging workflow is documented in [Distribution](docs/distribution.md); the
-first public binary release is being prepared.
+**Early development.** Available as a signed, notarized macOS app through
+Homebrew or [GitHub Releases](https://github.com/birosrichard/pingit/releases).
+
+## Install
+
+Requires macOS 14 or later, on Apple Silicon or Intel.
+
+```sh
+brew install --cask birosrichard/tap/pingit
+```
+
+Open **pingit** from Applications. It appears in the menu bar, with no main window
+or persistent Dock icon. See [Connect GitHub](#connect-github) to add your account.
+
+Alternatively, download the ZIP from [GitHub Releases](https://github.com/birosrichard/pingit/releases),
+extract it, and move `pingit.app` to Applications. Prebuilt releases do not require
+Xcode or your own signing team. See [Distribution](docs/distribution.md) for the
+release process.
 
 ## Features
 
@@ -18,7 +33,7 @@ first public binary release is being prepared.
 - **Optional native notifications:** review requests, approvals, requested changes, relevant comments and thread replies, and merge/close/reopen events for previously observed authored PRs. Event types can be configured individually; bot comments are off by default.
 - **Manual refresh and keyboard access:** refresh with ⌘R and switch inboxes with ⌘1–3.
 
-## Requirements
+## Requirements for building from source
 
 - macOS 14 or later, on Apple Silicon or Intel.
 - Full Xcode with Swift 6 support. CI uses Xcode 26.3; see [toolchain details](docs/ci.md).

@@ -30,7 +30,7 @@ def cask(archive):
   desc "GitHub pull requests and review requests in your menu bar"
   homepage "https://github.com/birosrichard/pingit"
 
-  depends_on macos: ">= :sonoma"
+  depends_on macos: :sonoma
 
   app "pingit.app"
 end
