@@ -4,7 +4,9 @@ A native macOS menu bar app that keeps your GitHub pull requests and review requ
 
 Check reviews, follow your own PRs, and open a pull request on GitHub without leaving a browser tab open all day. Built with SwiftUI, with no external package dependencies or backend service.
 
-**Early development.** Build from source for now; distribution and notarization are still planned.
+**Early development.** Build from source for now. The signed release and Homebrew
+packaging workflow is documented in [Distribution](docs/distribution.md); the
+first public binary release is being prepared.
 
 ## Features
 

@@ -46,36 +46,14 @@ and branch so new runs cancel superseded runs for the same PR, and manual runs
 on that same branch share the cancellation group. There is no `push` or scheduled
 trigger and no other build workflow, avoiding duplicate push/PR runs per commit.
 
-## Private repository allowance and estimated consumption
+## Public repository and runner usage
 
-This repository is private on GitHub Free. Standard `macos-15` uses the included
-Actions allowance; it does not require a paid plan or larger/premium runners.
-GitHub Free currently includes **2,000 Actions minutes per month** and **500 MB
-artifact storage**, shared with the owner's other applicable usage. See
-[included usage](https://docs.github.com/en/billing/reference/product-usage-included)
-and [Actions billing](https://docs.github.com/en/billing/concepts/product-billing/github-actions).
-The workflow works while sufficient allowance remains; it does not change payment
-methods, budgets, or spending limits, and cannot guarantee free execution after
-that allowance is exhausted.
-
-Budget **5–10 runner minutes per run** initially, including checkout, toolchain
-checks, compilation, tests and diagnostics upload. This is an unmeasured estimate
-until the first macOS run. GitHub rounds each job up to a whole minute; the
-15-minute timeout bounds normal execution to roughly **15 runner minutes**,
-with cancellation/cleanup overhead potentially adding time. Failed, cancelled,
-manual and rerun jobs also consume the time they execute. Use the owner's actual
-usage report to confirm included-allowance deductions; do not assume macOS and
-Linux allowance accounting are interchangeable. For conservative planning,
-reserve **50–100 allowance-minute equivalents** per estimated run (a 10× budgeting
-factor), or **150** at timeout; this is a planning reserve, not a measured charge.
-
-GitHub currently lists the same **$0.062 USD per runner minute** for standard M1
-and Intel macOS, the cheapest hosted macOS tier. At that rate, a 5–10 minute run
-has a list-price equivalent of **$0.31–$0.62**, or **$0.93** for 15 minutes, if
-chargeable beyond the included allowance. These figures are calculated from the
-[runner pricing reference](https://docs.github.com/en/billing/reference/actions-runner-pricing)
-(checked 2026-10-21), not a request to enable paid usage. Actual duration and
-account usage must be checked before estimating how many monthly runs fit.
+The repository became public on 2026-10-23 for source and Homebrew distribution.
+GitHub provides standard hosted runner execution free for public repositories;
+this workflow uses standard `macos-15`, not a larger runner. See
+[Actions billing](https://docs.github.com/en/billing/concepts/product-billing/github-actions).
+The previous private-repository allowance estimates no longer apply. The
+15-minute timeout still bounds stalled jobs.
 
 Only logs and test results are uploaded, with **one-day retention**, to reduce
 storage consumption; DerivedData and built products are excluded. Console logs
@@ -142,8 +120,9 @@ or launch-time policy acceptance. `validate-app.sh` expects an ordinary build
 product; Xcode's test action injects extra test entitlements, so that script is
 not run against CI's test product. `validate-launch.sh` needs a logged-in desktop
 session and remains a separate local smoke check. Distribution, Developer ID
-signing, notarization, and universal Release validation remain separate work;
-this ad hoc test product is not a distributable signed app. Follow the
+signing, notarization, and universal Release validation use the separate
+[release workflow](distribution.md); this ad hoc test product is not a
+distributable signed app. Follow the
 [README validation commands](../README.md#validation) for local product checks.
 
 The workflow uses `pull_request`, never `pull_request_target`, with only
