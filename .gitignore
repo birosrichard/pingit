@@ -14,3 +14,6 @@ xcuserdata/
 *.pkg
 *.dmg
 .swiftpm/
+
+# Keep local development notes out of the public repository.
+/docs/
