@@ -26,6 +26,8 @@ struct GitHubConversationObservation: Sendable {
 
 struct GitHubConversationPlan: Sendable {
     static let maximumPullRequests = 40
+    // Keep baselines between batches; discovery returns up to 200 PRs per inbox.
+    static let maximumTrackedPullRequests = 400
     static let retention: TimeInterval = 7 * 24 * 60 * 60
     struct Target: Sendable {
         let id: String

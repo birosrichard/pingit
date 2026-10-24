@@ -3,26 +3,64 @@ import Foundation
 // Pure projection used inside the existing detector's compare -> commit transaction.
 enum ConversationChangeTracking {
     static func plan(source: PullRequestChangeSnapshot.Source?, sections: PullRequestChangeInput.Sections,
-                     at: Date) -> GitHubConversationPlan {
+                     at: Date, selectedIDs: [String]? = nil) -> GitHubConversationPlan {
         // Stale, conflicting and truncated search results cannot prove current eligibility.
         guard complete(sections.authored), complete(sections.requested) else { return .init(limited: true) }
         let authored = Set(sections.authored?.pullRequests.map(\.id) ?? [])
         let requested = Set(sections.requested?.pullRequests.map(\.id) ?? [])
         let old = source?.conversations ?? [:]
-        let retained = old.filter { _, value in
-            value.lastRequestedAt.map { at >= $0 && at.timeIntervalSince($0) <= GitHubConversationPlan.retention } ?? false
-        }.keys
-        let ids = authored.union(requested).union(retained)
-        let targets = ids.sorted {
-            if authored.contains($0) != authored.contains($1) { return authored.contains($0) }
-            if requested.contains($0) != requested.contains($1) { return requested.contains($0) }
-            return $0 < $1
-        }.prefix(GitHubConversationPlan.maximumPullRequests).map { id in
+        let ids = eligibleIDs(source: source, sections: sections, at: at)
+        let tracked = Array(ids.prefix(GitHubConversationPlan.maximumTrackedPullRequests))
+        let included = Set(tracked)
+        let ordered = selectedIDs.map { $0.filter(included.contains) } ?? tracked
+        let targets = ordered.prefix(GitHubConversationPlan.maximumPullRequests).map { id in
             GitHubConversationPlan.Target(id: id, authored: authored.contains(id),
                 lastRequestedAt: requested.contains(id) ? at : old[id]?.lastRequestedAt,
                 fingerprint: old[id]?.comparable == true ? old[id]?.fingerprint : nil)
         }
-        return .init(targets: targets, limited: ids.count > GitHubConversationPlan.maximumPullRequests)
+        return .init(targets: targets, limited: ids.count > targets.count)
+    }
+
+    static func plans(snapshot: PullRequestChangeSnapshot, sections: [String: PullRequestChangeInput.Sections],
+                      at: Date) -> [String: GitHubConversationPlan] {
+        let selected = Array(scanOrder(snapshot: snapshot, sections: sections, at: at)
+            .prefix(GitHubConversationPlan.maximumPullRequests))
+        return Dictionary(uniqueKeysWithValues: sections.map { scope, result in
+            (scope, plan(source: snapshot.sources[scope], sections: result, at: at, selectedIDs: selected))
+        })
+    }
+
+    private static func scanOrder(snapshot: PullRequestChangeSnapshot,
+                                  sections: [String: PullRequestChangeInput.Sections], at: Date) -> [String] {
+        var ids: Set<String> = []
+        var requested: Set<String> = []
+        for (scope, result) in sections where complete(result.authored) && complete(result.requested) {
+            ids.formUnion(eligibleIDs(source: snapshot.sources[scope], sections: result, at: at)
+                .prefix(GitHubConversationPlan.maximumTrackedPullRequests))
+            requested.formUnion(result.requested?.pullRequests.map(\.id) ?? [])
+        }
+        let ordered = ids.sorted {
+            if requested.contains($0) != requested.contains($1) { return requested.contains($0) }
+            return $0 < $1
+        }
+        let start = snapshot.conversationScanAfter.flatMap { ordered.firstIndex(of: $0) }.map {
+            ($0 + 1) % max(1, ordered.count)
+        } ?? 0
+        return Array(ordered.dropFirst(start)) + Array(ordered.prefix(start))
+    }
+
+    private static func eligibleIDs(source: PullRequestChangeSnapshot.Source?,
+                                    sections: PullRequestChangeInput.Sections, at: Date) -> [String] {
+        let authored = Set(sections.authored?.pullRequests.map(\.id) ?? [])
+        let requested = Set(sections.requested?.pullRequests.map(\.id) ?? [])
+        let retained = (source?.conversations ?? [:]).filter { _, value in
+            value.lastRequestedAt.map { at >= $0 && at.timeIntervalSince($0) <= GitHubConversationPlan.retention } ?? false
+        }.keys
+        return authored.union(requested).union(retained).sorted {
+            if requested.contains($0) != requested.contains($1) { return requested.contains($0) }
+            if authored.contains($0) != authored.contains($1) { return authored.contains($0) }
+            return $0 < $1
+        }
     }
 
     static func reconcile(_ snapshot: inout PullRequestChangeSnapshot, scopes: [String]) {
@@ -31,6 +69,7 @@ enum ConversationChangeTracking {
         // Changing any credential topology conservatively rebases comment coverage, including
         // scopes that have not yet produced a PR result. Ordinary review history stays intact.
         snapshot.conversationScopes = scopes
+        snapshot.conversationScanAfter = nil
         for source in snapshot.sources.keys {
             guard var values = snapshot.sources[source]?.conversations else { continue }
             for id in values.keys { values[id]?.comparable = false }
@@ -49,11 +88,14 @@ enum ConversationChangeTracking {
             var values = previous
             let sections = input.results[scope.id]
             let result = sections?.conversations
-            for id in values.keys { values[id]?.comparable = false }
             if let sections, complete(sections.authored), complete(sections.requested), let result {
                 // Prune only when fresh complete eligibility searches prove the retention expired.
-                let eligible = Set(plan(source: old.sources[scope.id], sections: sections, at: input.observedAt).targets.map(\.id))
+                let eligible = Set(eligibleIDs(source: old.sources[scope.id], sections: sections, at: input.observedAt)
+                    .prefix(GitHubConversationPlan.maximumTrackedPullRequests))
                 values = values.filter { eligible.contains($0.key) }
+                // Unscheduled PRs keep their comparison floor until their next turn.
+                // Attempted but unavailable observations still create a coverage barrier.
+                for id in result.attemptedIDs { values[id]?.comparable = false }
                 for id in result.retiredIDs { values.removeValue(forKey: id) }
                 for (id, observation) in result.observations where eligible.contains(id) {
                     let prior = previous[id]
@@ -78,9 +120,15 @@ enum ConversationChangeTracking {
                         commentIDs: ids.sorted(), comparable: true, lastRequestedAt: observation.lastRequestedAt,
                         reviewCommentIDs: reviewIDs.isEmpty ? nil : reviewIDs.sorted())
                 }
+            } else {
+                for id in values.keys { values[id]?.comparable = false }
             }
             source.conversations = values.isEmpty && source.conversations == nil ? nil : values
             if source.authored != nil || source.requested != nil || source.conversations != nil { next.sources[scope.id] = source }
+        }
+        let attempted = Set(input.results.values.flatMap { $0.conversations?.attemptedIDs ?? [] })
+        if let last = scanOrder(snapshot: old, sections: input.results, at: input.observedAt).last(where: attempted.contains) {
+            next.conversationScanAfter = last
         }
         let ids = Set(input.results.values.flatMap { $0.conversations?.observations.keys.map { $0 } ?? [] })
         for id in ids.sorted() {

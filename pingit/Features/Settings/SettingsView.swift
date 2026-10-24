@@ -199,11 +199,18 @@ struct GitHubConnectionControls: View {
 }
 
 struct NotificationSettingsSection: View {
+    @Environment(GitHubConnection.self) private var connection
     @Environment(NotificationCoordinator.self) private var notifications
 
     var body: some View {
         @Bindable var preferences = notifications.preferences
         Section("Notifications") {
+            if let warning = connection.dashboard.changeDetectionWarning {
+                Label(warning, systemImage: "exclamationmark.triangle")
+                    .foregroundStyle(.orange)
+                Button("Retry notification tracking") { connection.dashboard.refresh() }
+                    .disabled(connection.dashboard.isLoading || connection.account == nil)
+            }
             Toggle("Enable notifications", isOn: $preferences.enabled)
             Text("New events only. Private repository names and PR titles may appear in banners and Notification Center. Control previews in macOS System Settings.")
                 .font(.caption).foregroundStyle(.secondary)

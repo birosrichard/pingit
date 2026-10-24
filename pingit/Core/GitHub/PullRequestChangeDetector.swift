@@ -89,7 +89,15 @@ actor PullRequestChangeDetector {
                           at: Date, generation: UInt64) -> GitHubConversationPlan {
         guard generation >= self.generation, !Task.isCancelled else { return .init() }
         do { try load() } catch { return .init() }
-        return ConversationChangeTracking.plan(source: baseline?.sources[scopeID], sections: sections, at: at)
+        return ConversationChangeTracking.plans(snapshot: baseline ?? .init(identity: ""),
+            sections: [scopeID: sections], at: at)[scopeID] ?? .init()
+    }
+
+    func conversationPlans(sections: [String: PullRequestChangeInput.Sections],
+                           at: Date, generation: UInt64) -> [String: GitHubConversationPlan] {
+        guard generation >= self.generation, !Task.isCancelled else { return [:] }
+        do { try load() } catch { return sections.mapValues { _ in .init(limited: true) } }
+        return ConversationChangeTracking.plans(snapshot: baseline ?? .init(identity: ""), sections: sections, at: at)
     }
 
     func lifecyclePlan(_ input: PullRequestChangeInput, generation: UInt64) -> GitHubLifecyclePlan {

@@ -24,16 +24,17 @@ private struct ConversationFixture {
     var scope: PullRequestChangeScope { .init(row)! }
     let repository = GitHubRepository(id: "R_1", nameWithOwner: "owner/private",
         url: URL(string: "https://github.com/owner/private")!)
-    func pr(decision: GitHubReviewStatus = .reviewRequired, time: Double = 1, reviews: [GitHubPullRequestReview] = []) -> GitHubPullRequest {
-        .init(id: "PR_1", number: 1, title: "Secret title", url: URL(string: "https://github.com/owner/private/pull/1")!,
+    func pr(_ id: String = "PR_1", number: Int = 1, decision: GitHubReviewStatus = .reviewRequired,
+            time: Double = 1, reviews: [GitHubPullRequestReview] = []) -> GitHubPullRequest {
+        .init(id: id, number: number, title: "Secret title", url: URL(string: "https://github.com/owner/private/pull/\(number)")!,
               repository: repository, authorLogin: "octocat", isDraft: false, createdAt: .distantPast,
               updatedAt: Date(timeIntervalSince1970: time), reviewStatus: decision,
               latestReviews: .init(reviews: reviews, limitations: []), reviewRequests: [])
     }
     func comment(_ id: String = "C1", kind: PullRequestChangeEvent.Kind = .newPRComment,
-                 time: Double = 150, relevant: Bool = true, bot: Bool = false) -> GitHubConversationComment {
+                 time: Double = 150, relevant: Bool = true, bot: Bool = false, number: Int = 1) -> GitHubConversationComment {
         .init(id: id, kind: kind, publishedAt: Date(timeIntervalSince1970: time),
-              url: URL(string: "https://github.com/owner/private/pull/1#issuecomment-1")!,
+              url: URL(string: "https://github.com/owner/private/pull/\(number)#issuecomment-1")!,
               actorLogin: "reviewer", isBot: bot, relevant: relevant, reviewID: nil)
     }
     func input(_ sequence: UInt64, comments: [GitHubConversationComment]? = [],
@@ -58,6 +59,102 @@ private struct ConversationFixture {
 }
 
 struct ConversationDetectionTests {
+    @Test func rotationSurvivesRestartAndPreservesCommentsBetweenTurns() async throws {
+        let f = ConversationFixture()
+        var detector = PullRequestChangeDetector(store: f.memory.store)
+        let authored = (1...81).map { f.pr(String(format: "PR_%03d", $0), number: $0) }
+        let requested = f.pr("REVIEW_1", number: 82)
+        let sections = PullRequestChangeInput.Sections(
+            authored: .init(pullRequests: authored, truncationReasons: [], coverageLimitations: []),
+            requested: .init(pullRequests: [requested], truncationReasons: [], coverageLimitations: []))
+        let requests = Dictionary(uniqueKeysWithValues: (authored + [requested]).map { ($0.id, $0) })
+        var visited: Set<String> = []
+        var deferredID: String?
+        for sequence in 1...4 {
+            let time = Date(timeIntervalSince1970: Double(sequence) * 100)
+            let plan = await detector.conversationPlan(scopeID: f.scope.id, sections: sections, at: time, generation: 1)
+            #expect(plan.targets.count == 40 && plan.limited)
+            if sequence == 1 {
+                #expect(plan.targets.first?.id == requested.id)
+                deferredID = plan.targets.last?.id
+            }
+            visited.formUnion(plan.targets.map(\.id))
+            let observations = plan.targets.map { target in
+                let pr = requests[target.id]!
+                let comments: [GitHubConversationComment] = sequence > 1 && target.id == deferredID
+                    ? [f.comment(time: 150, number: pr.number)] : []
+                return (target.id, GitHubConversationObservation(id: target.id, repository: f.repository,
+                    number: pr.number, fingerprint: changeDigest(comments.map(\.id).joined()), verifiedAt: time,
+                    comments: comments, lastRequestedAt: target.lastRequestedAt))
+            }
+            var results = sections
+            results.conversations = .init(observations: Dictionary(uniqueKeysWithValues: observations),
+                                          attemptedIDs: plan.targets.map(\.id), limited: true)
+            let output = await detector.process(.init(sequence: UInt64(sequence), scopes: [f.scope],
+                results: [f.scope.id: results], observedAt: time), generation: 1)
+            #expect(!output.storageFailed)
+            #expect(output.events.count == (sequence == 4 ? 1 : 0))
+            if sequence == 2 {
+                let saved = try #require(try f.memory.store.load()?.sources[f.scope.id])
+                let deferred = try #require(deferredID)
+                #expect(saved.conversations?[deferred]?.comparable == true)
+                // The cursor and baselines are disk state, not an in-memory iterator.
+                detector = PullRequestChangeDetector(store: f.memory.store)
+            }
+            if sequence == 3 { #expect(visited == Set(requests.keys)) }
+        }
+        #expect(try f.memory.store.load()?.sources[f.scope.id]?.conversations?.count == 82)
+    }
+
+    @Test func failedBatchDoesNotStarveTheNextBatch() async {
+        let f = ConversationFixture(), detector = PullRequestChangeDetector(store: f.memory.store)
+        let many = GitHubPullRequestDiscoveryResult(pullRequests: (1...81).map { f.pr("PR_\($0)", number: $0) },
+            truncationReasons: [], coverageLimitations: [])
+        var sections = PullRequestChangeInput.Sections(authored: many,
+            requested: .init(pullRequests: [], truncationReasons: [], coverageLimitations: []))
+        let first = await detector.conversationPlan(scopeID: f.scope.id, sections: sections, at: Date(), generation: 1)
+        sections.conversations = .init(attemptedIDs: first.targets.map(\.id), error: .networkUnavailable)
+        _ = await detector.process(.init(sequence: 1, scopes: [f.scope], results: [f.scope.id: sections],
+                                         observedAt: Date()), generation: 1)
+        let second = await detector.conversationPlan(scopeID: f.scope.id, sections: sections, at: Date(), generation: 1)
+        #expect(Set(first.targets.map(\.id)).isDisjoint(with: second.targets.map(\.id)))
+    }
+
+    @Test func overlappingTokensShareRotationEvenAfterOneSearchFails() async throws {
+        let f = ConversationFixture(), detector = PullRequestChangeDetector(store: f.memory.store)
+        let second = GitHubTokenConnection(id: UUID(), account: f.row.account, resourceOwner: "second")
+        let secondScope = try #require(PullRequestChangeScope(second))
+        func sections(_ range: ClosedRange<Int>) -> PullRequestChangeInput.Sections {
+            .init(authored: .init(pullRequests: range.map { f.pr(String(format: "PR_%03d", $0), number: $0) },
+                truncationReasons: [], coverageLimitations: []),
+                requested: .init(pullRequests: [], truncationReasons: [], coverageLimitations: []))
+        }
+        let firstSections = sections(1...81), secondSections = sections(41...121)
+        let firstIDs = Set(firstSections.authored!.pullRequests.map(\.id))
+        let secondIDs = Set(secondSections.authored!.pullRequests.map(\.id))
+        var visited: Set<String> = []
+        for sequence in 1...4 {
+            var results = [f.scope.id: firstSections, secondScope.id: secondSections]
+            if sequence == 2 { results.removeValue(forKey: secondScope.id) }
+            let time = Date(timeIntervalSince1970: Double(sequence) * 100)
+            let plans = await detector.conversationPlans(sections: results, at: time, generation: 1)
+            let firstBatch = Set(plans[f.scope.id]?.targets.map(\.id) ?? [])
+            let secondBatch = Set(plans[secondScope.id]?.targets.map(\.id) ?? [])
+            #expect(firstBatch.union(secondBatch).count <= 40)
+            if sequence != 2 {
+                #expect(firstBatch.intersection(secondIDs) == secondBatch.intersection(firstIDs))
+            }
+            visited.formUnion(firstBatch.union(secondBatch))
+            for (scope, plan) in plans {
+                results[scope]?.conversations = .init(attemptedIDs: plan.targets.map(\.id), limited: plan.limited)
+            }
+            let output = await detector.process(.init(sequence: UInt64(sequence), scopes: [f.scope, secondScope],
+                results: results, observedAt: time), generation: 1)
+            #expect(!output.storageFailed)
+        }
+        #expect(visited == firstIDs.union(secondIDs))
+    }
+
     @Test func initialBaselineRestartAndRepeatedSyncAreQuiet() async throws {
         let f = ConversationFixture()
         let d = PullRequestChangeDetector(store: f.memory.store)
@@ -353,6 +450,7 @@ private actor ConversationFlight {
     var fail = false
     var hold = false
     var pending: CheckedContinuation<GitHubConversationResult, Never>?
+    var conversationCalls = 0
     func configure(_ sequence: UInt64, fail: Bool = false, hold: Bool = false) {
         self.sequence = sequence; self.fail = fail; self.hold = hold
     }
@@ -361,6 +459,7 @@ private actor ConversationFlight {
         return (review ? input.results[fixture.scope.id]?.requested : input.results[fixture.scope.id]?.authored)!
     }
     func conversations() async -> GitHubConversationResult {
+        conversationCalls += 1
         if hold { return await withCheckedContinuation { pending = $0 } }
         return result()
     }
@@ -383,6 +482,55 @@ struct ConversationRefreshTests {
         let deadline = ContinuousClock.now + .seconds(5)
         while dashboard.isRefreshing, ContinuousClock.now < deadline { await Task.yield() }
         #expect(!dashboard.isRefreshing)
+    }
+    @Test func failedDiscoveryTokensDoNotBlockOtherConversationWorkers() async {
+        let f = ConversationFixture(), flight = ConversationFlight()
+        let healthy = GitHubTokenConnection(id: UUID(), account: f.row.account, resourceOwner: "healthy")
+        let other = GitHubTokenConnection(id: UUID(), account: f.row.account, resourceOwner: "other")
+        let dashboard = PullRequestDashboard(scopedCredential: { $0 },
+            changeDetector: .init(store: f.memory.store),
+            conversationFetch: { _, _, _ in await flight.conversations() },
+            fetch: { _, token, review in
+                guard token == healthy.storageAccount else { throw GitHubAPIError.networkUnavailable }
+                return await flight.sections(review: review)
+            })
+        dashboard.setConnections([f.row, other, healthy], refresh: false)
+        dashboard.refresh()
+        await finish(dashboard)
+        #expect(await flight.conversationCalls == 1)
+        #expect(dashboard.sources[healthy.id]?.authored.phase == .loaded)
+        #expect(dashboard.sources[f.row.id]?.authored.phase == .failed)
+        dashboard.shutdown()
+    }
+    @Test func failedStorageShowsWarningAndSuccessfulRetryClearsIt() async {
+        let f = ConversationFixture(), flight = ConversationFlight()
+        var time = Date(timeIntervalSince1970: 100)
+        let dashboard = PullRequestDashboard(scopedCredential: { _ in "test-token" }, now: { time },
+            changeDetector: .init(store: f.memory.store),
+            conversationFetch: { _, _, _ in await flight.conversations() },
+            fetch: { _, _, review in await flight.sections(review: review) })
+        var events: [PullRequestChangeEvent] = []
+        dashboard.onChanges = { events += $0 }
+        dashboard.setConnections([f.row], refresh: false)
+        dashboard.refresh()
+        await finish(dashboard)
+        #expect(dashboard.changeDetectionWarning == nil)
+        time = Date(timeIntervalSince1970: 200)
+        await flight.configure(2)
+        f.memory.failWrites = true
+        dashboard.refresh()
+        await finish(dashboard)
+        #expect(dashboard.changeDetectionStorageFailed)
+        #expect(dashboard.changeDetectionWarning?.contains("Notifications are paused") == true)
+        #expect(dashboard.authored.phase == .loaded && events.isEmpty)
+        time = Date(timeIntervalSince1970: 300)
+        await flight.configure(3)
+        f.memory.failWrites = false
+        dashboard.refresh()
+        await finish(dashboard)
+        #expect(!dashboard.changeDetectionStorageFailed && dashboard.changeDetectionWarning == nil)
+        #expect(events.map(\.kind) == [.newPRComment])
+        dashboard.shutdown()
     }
     @Test func sharedRefreshCommitsCommentsAndIsolatesConversationFailures() async {
         let f = ConversationFixture(), flight = ConversationFlight()

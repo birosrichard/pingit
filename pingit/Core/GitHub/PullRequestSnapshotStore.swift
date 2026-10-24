@@ -56,6 +56,7 @@ struct PullRequestSnapshotStore: Sendable {
     static func validate(_ value: PullRequestChangeSnapshot) throws {
         guard value.version == PullRequestChangeSnapshot.schemaVersion,
               value.identity.count == 64, value.sources.count <= 64,
+              (value.conversationScanAfter.map { !$0.isEmpty && $0.utf8.count <= 256 } ?? true),
               (value.conversationScopes?.count ?? 0) <= 64,
               value.conversationScopes?.allSatisfy({ !$0.isEmpty && $0.utf8.count <= 128 }) ?? true,
               (value.lifecycleScopes?.count ?? 0) <= 64,
@@ -74,7 +75,7 @@ struct PullRequestSnapshotStore: Sendable {
               value.sources.values.reduce(0, { $0 + ($1.authored?.count ?? 0) + ($1.requested?.count ?? 0) }) <= maximumEntries,
               value.sources.allSatisfy({ key, source in
                   !key.isEmpty && key.utf8.count <= 128
-                      && (source.conversations?.count ?? 0) <= GitHubConversationPlan.maximumPullRequests
+                      && (source.conversations?.count ?? 0) <= GitHubConversationPlan.maximumTrackedPullRequests
                       && (source.conversations?.allSatisfy { id, conversation in
                           !id.isEmpty && id.utf8.count <= 256 && !conversation.repositoryID.isEmpty
                               && conversation.repositoryID.utf8.count <= 256 && conversation.number > 0
