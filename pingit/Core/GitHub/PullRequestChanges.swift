@@ -37,6 +37,8 @@ struct PullRequestChangeSnapshot: Codable, Equatable, Sendable {
     var sources: [String: Source] = [:]
     var rebasingRepositories: [String] = []
     var conversationScopes: [String]? = nil
+    // A shared node-ID cursor keeps overlapping tokens on the same batch after failures.
+    var conversationScanAfter: String? = nil
     var lifecycleScopes: [String]? = nil
     var lifecycles: [String: Lifecycle]? = nil
 

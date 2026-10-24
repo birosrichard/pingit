@@ -106,6 +106,7 @@ The menu bar icon indicates connection presence. Tab counts show displayed PRs, 
 - Results depend on token visibility, organization approval, and bounded API queries. Incomplete results and failed refreshes are surfaced; previously loaded rows may remain visible.
 - CI status is currently hidden from the dashboard.
 - Comment and lifecycle notifications use polling and bounded tracking. They are not a complete activity history, unread tracker, or guarantee of delivery. The first sync establishes a baseline rather than notifying about old activity.
+- Comment tracking retains up to 400 PRs per token and rotates through a shared batch of 40 PRs per refresh. Larger inboxes take multiple refreshes to cover; tracking resumes at the next batch after relaunch. PRs with more than 50 comments, 50 review threads, or 50 comments in a thread currently have incomplete comment coverage.
 - There are no in-app review, comment, or merge actions. PR links and notification clicks open GitHub.
 
 ## Privacy and security

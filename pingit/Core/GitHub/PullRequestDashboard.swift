@@ -128,6 +128,11 @@ final class PullRequestDashboard {
     // Invalidate downstream asynchronous delivery with the same lifecycle/session boundary.
     @ObservationIgnored var onChangeDeliveryInvalidated: (@MainActor () -> Void)?
     private(set) var changeDetectionStorageFailed = false
+    var changeDetectionWarning: String? {
+        changeDetectionStorageFailed
+            ? "Notifications are paused because pingit couldn’t read or save its local tracking data. Refresh to retry."
+            : nil
+    }
 
     @ObservationIgnored private let credential: (String) throws -> String?
     @ObservationIgnored private let fetch: Fetch
@@ -391,6 +396,7 @@ final class PullRequestDashboard {
                 }
             }
             if self.session == session, !Task.isCancelled {
+                await loadConversations(work: work, session: session)
                 await loadLifecycles(work: work, session: session)
                 if self.session == session, !Task.isCancelled {
                     for (row, _) in work { finishSourceSync(row) }
@@ -455,17 +461,40 @@ final class PullRequestDashboard {
         async let authored: Void = loadSection(id: row.id, account: account, token: token, reviews: false, session: session)
         async let reviews: Void = loadSection(id: row.id, account: account, token: token, reviews: true, session: session)
         _ = await (authored, reviews)
+    }
+
+    private func loadConversations(work: [(GitHubTokenConnection, String)], session: UUID) async {
+        guard self.session == session, !Task.isCancelled, let changeDetector else { return }
+        // Plan after every discovery worker completes so overlapping tokens verify the
+        // same PRs, even after a partial failure or when their repository visibility differs.
+        let plans = await changeDetector.conversationPlans(sections: flightResults, at: now(), generation: connectionGeneration)
         guard self.session == session, !Task.isCancelled else { return }
-        if let changeDetector, let fetchConversations, let sections = flightResults[row.storageAccount] {
-            let generation = connectionGeneration
-            let plan = await changeDetector.conversationPlan(scopeID: row.storageAccount, sections: sections,
-                                                            at: now(), generation: generation)
+        await withTaskGroup(of: Void.self) { group in
+            var iterator = work.filter { plans[$0.0.storageAccount] != nil }.makeIterator()
+            for _ in 0..<2 {
+                if let (row, token) = iterator.next(), let plan = plans[row.storageAccount] {
+                    group.addTask { await self.loadConversation(row, token: token, plan: plan, session: session) }
+                }
+            }
+            while await group.next() != nil {
+                guard !Task.isCancelled else { group.cancelAll(); break }
+                if let (row, token) = iterator.next(), let plan = plans[row.storageAccount] {
+                    group.addTask { await self.loadConversation(row, token: token, plan: plan, session: session) }
+                }
+            }
+        }
+    }
+
+    private func loadConversation(_ row: GitHubTokenConnection, token: String,
+                                  plan: GitHubConversationPlan, session: UUID) async {
+        if let account = row.account, let fetchConversations {
             guard self.session == session, !Task.isCancelled else { return }
             let result = await fetchConversations(plan, account, token)
             guard self.session == session, !Task.isCancelled else { return }
             flightResults[row.storageAccount, default: .init()].conversations = result
-            sources[row.id]?.conversationWarning = result.limited || result.error != nil
-                ? "Conversation coverage is incomplete. Some comment notifications are paused." : nil
+            sources[row.id]?.conversationWarning = result.error != nil
+                ? "Conversation coverage is incomplete. Some comment notifications are paused."
+                : result.limited ? "Comment coverage is limited. Some PRs are waiting for a later refresh or exceed tracking limits." : nil
             // Comment permission errors do not invalidate otherwise healthy PR discovery.
             // Rate restrictions still gate this token's next shared refresh.
             if let error = result.error, error == .rateLimited || error.retryDeadline != nil {

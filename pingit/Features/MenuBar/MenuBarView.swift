@@ -24,7 +24,7 @@ struct MenuBarView: View {
     }
     private var pullRequests: [GitHubPullRequest] { selection.prioritizedPullRequests(in: state, viewerLogin: dashboard.account?.login) }
     private var errors: [String] {
-        [connection.errorMessage,
+        [connection.errorMessage, dashboard.changeDetectionWarning,
          dashboard.reviews.errorMessage.map { "Review: \($0)" },
          dashboard.authored.errorMessage.map { "My PRs and drafts: \($0)" }].compactMap { $0 } + Array(Set(dashboard.sources.values.flatMap { [$0.conversationWarning, $0.lifecycleWarning].compactMap { $0 } })).sorted()
     }
