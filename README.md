@@ -20,8 +20,7 @@ or persistent Dock icon. See [Connect GitHub](#connect-github) to add your accou
 
 Alternatively, download the ZIP from [GitHub Releases](https://github.com/birosrichard/pingit/releases),
 extract it, and move `pingit.app` to Applications. Prebuilt releases do not require
-Xcode or your own signing team. See [Distribution](docs/distribution.md) for the
-release process.
+Xcode or your own signing team.
 
 ## Features
 
@@ -36,7 +35,7 @@ release process.
 ## Requirements for building from source
 
 - macOS 14 or later, on Apple Silicon or Intel.
-- Full Xcode with Swift 6 support. CI uses Xcode 26.3; see [toolchain details](docs/ci.md).
+- Full Xcode with Swift 6 support. CI uses Xcode 26.3.
 - A GitHub.com account and a personal access token for the repositories you want to follow.
 - A valid Apple Development signing identity and provisioning profile to connect an account using the app's Keychain storage. The committed development team does not provide signing assets for your machine.
 
@@ -84,8 +83,6 @@ Owner labels help you identify connections; they do not filter searches or verif
 
 Use **Replace token** for expired or revoked credentials. Removing a connection deletes its local credential; revoke the token separately on GitHub when you no longer need it.
 
-See [token storage and connection behavior](docs/tokens.md) and [discovery coverage](docs/discovery.md) for details.
-
 ## What attention labels mean
 
 Review status and attention are separate signals. **Approved** describes GitHub's overall review decision; it does not establish merge readiness.
@@ -100,14 +97,14 @@ Review status and attention are separate signals. **Approved** describes GitHub'
 
 **“Waiting on others” does not identify a specific person or blocker.** The classifier does not consider CI, merge conflicts, or discussions when assigning attention. An approved PR with conflicts can therefore still receive this label. Check GitHub for merge readiness and outstanding work.
 
-The menu bar icon indicates connection presence. Tab counts show displayed PRs, including retained rows; they are not action or unread counts. See [attention rules](docs/phase-7a.md).
+The menu bar icon indicates connection presence. Tab counts show displayed PRs, including retained rows; they are not action or unread counts.
 
 ## Current limitations
 
 - GitHub.com only, with one identity across all configured tokens. OAuth, multiple identities, and GitHub Enterprise Server are not supported.
 - The Review inbox follows active direct user requests, not team review requests.
 - Results depend on token visibility, organization approval, and bounded API queries. Incomplete results and failed refreshes are surfaced; previously loaded rows may remain visible.
-- CI status is currently hidden from the dashboard. The retained CI implementation and token limitations are documented in [CI metadata](docs/checks.md).
+- CI status is currently hidden from the dashboard.
 - Comment and lifecycle notifications use polling and bounded tracking. They are not a complete activity history, unread tracker, or guarantee of delivery. The first sync establishes a baseline rather than notifying about old activity.
 - There are no in-app review, comment, or merge actions. PR links and notification clicks open GitHub.
 
@@ -120,8 +117,6 @@ pingit talks directly to GitHub. It has no analytics or backend service and does
 - **Change detection:** a minimal snapshot in the app's sandboxed Application Support directory stores identifiers, timestamps, review/draft/lifecycle states, and comment IDs. It excludes tokens, PR titles, repository names, URLs, and comment bodies.
 - **Networking:** authenticated API requests use an ephemeral HTTPS session with disk caching and cookies disabled and redirects rejected. Public avatars load separately without a token.
 - **Notifications:** disabled by default and require explicit macOS permission. When enabled, private PR metadata may appear in Notification Center and be retained by macOS.
-
-For implementation details, see [token storage](docs/tokens.md), [notification behavior](docs/phase-5c.md), [comment tracking](docs/phase-6a.md), and [lifecycle tracking](docs/phase-6b.md).
 
 ## Development
 
@@ -160,10 +155,10 @@ sh scripts/validate-app.sh build/ValidationDebug/Build/Products/Debug/pingit.app
 sh scripts/validate-launch.sh build/ValidationDebug/Build/Products/Debug/pingit.app
 ```
 
-The automated tests use mocked services and do not access your real Keychain or GitHub account. Passing them does not verify live token permissions, provisioned Keychain access, native notifications, or visual accessibility. Those require manual checks. See [CI and local validation](docs/ci.md).
+The automated tests use mocked services and do not access your real Keychain or GitHub account. Passing them does not verify live token permissions, provisioned Keychain access, native notifications, or visual accessibility. Those require manual checks.
 
 ## Contributing
 
 Bug reports and focused pull requests are welcome. For a bug report, include your macOS and Xcode versions, what you expected, what happened, and reproduction steps. Redact tokens and private repository information from logs and screenshots.
 
-Keep changes small, add tests for behavior changes, and run the relevant checks above. A documentation-only change does not require an app build. Read the [architecture](docs/architecture.md) and [roadmap](docs/roadmap.md) for project context; the phase documents preserve implementation notes and historical validation details.
+Keep changes small, add tests for behavior changes, and run the relevant checks above. A documentation-only change does not require an app build.
